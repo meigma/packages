@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/meigma/packages/internal/localrepo"
+	"github.com/meigma/packages/internal/r2repo"
 )
 
 // LocalBuildFunc builds one verified local candidate tree.
@@ -20,6 +21,9 @@ type LocalRebuildFunc func(context.Context, localrepo.RebuildRequest) (localrepo
 
 // SyncPlanFunc computes an ordered candidate-to-remote filesystem plan.
 type SyncPlanFunc func(string, string) (localrepo.SyncPlan, error)
+
+// ApplySyncFunc applies and verifies an ordered candidate-tree sync to R2.
+type ApplySyncFunc func(context.Context, r2repo.Request) (r2repo.Result, error)
 
 // ValidateRequestFunc validates an unprivileged workflow request.
 type ValidateRequestFunc func(string, string, string) (localrepo.RequestValidation, error)
@@ -52,6 +56,8 @@ type Options struct {
 	RebuildLocal LocalRebuildFunc
 	// PlanSync supplies the ordered filesystem planning implementation.
 	PlanSync SyncPlanFunc
+	// ApplySync supplies the ordered R2 mutation implementation.
+	ApplySync ApplySyncFunc
 	// ValidateRequest supplies unprivileged project and tag validation.
 	ValidateRequest ValidateRequestFunc
 }
@@ -78,6 +84,9 @@ func NewRootCommand(options Options) *cobra.Command {
 	}
 	if options.PlanSync == nil {
 		options.PlanSync = localrepo.PlanSync
+	}
+	if options.ApplySync == nil {
+		options.ApplySync = r2repo.Apply
 	}
 	if options.ValidateRequest == nil {
 		options.ValidateRequest = localrepo.ValidateRequest
@@ -111,6 +120,7 @@ func NewRootCommand(options Options) *cobra.Command {
 	root.AddCommand(newBuildLocalCommand(options))
 	root.AddCommand(newRebuildLocalCommand(options))
 	root.AddCommand(newPlanSyncCommand(options))
+	root.AddCommand(newApplySyncCommand(options))
 	root.AddCommand(newValidateRequestCommand(options))
 
 	return root

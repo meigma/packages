@@ -5,10 +5,12 @@ import (
 	"context"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/meigma/packages/internal/localrepo"
+	"github.com/meigma/packages/internal/r2repo"
 )
 
 func TestVersionFlagPrintsBuildMetadata(t *testing.T) {
@@ -182,6 +184,63 @@ func TestPlanSyncCommandPrintsTheResolvedPlan(t *testing.T) {
 		"candidate_root":"/tmp/candidate",
 		"remote_root":"/tmp/remote",
 		"actions":[{"stage":"delete","kind":"delete","path":"expired.rpm"}]
+	}`, stdout.String())
+	assert.Empty(t, stderr.String())
+}
+
+func TestApplySyncCommandPassesResolvedRequestAndPrintsResult(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	expectedRequest := r2repo.Request{
+		Root:            "/tmp/candidate",
+		Bucket:          "meigma-packages",
+		Prefix:          "_staging/",
+		Endpoint:        "https://example.r2.cloudflarestorage.com",
+		AccessKeyID:     "access-key",
+		SecretAccessKey: "secret-key",
+		SessionToken:    "session-token",
+	}
+	expectedResult := r2repo.Result{
+		Bucket:   expectedRequest.Bucket,
+		Prefix:   expectedRequest.Prefix,
+		NoOp:     false,
+		Verified: true,
+		Actions: []localrepo.SyncAction{{
+			Stage: "content",
+			Kind:  "create",
+			Path:  "apt/pool/fixture/new.deb",
+		}},
+	}
+	vp := viper.New()
+	vp.Set("r2-access-key-id", expectedRequest.AccessKeyID)
+	vp.Set("r2-secret-access-key", expectedRequest.SecretAccessKey)
+	vp.Set("r2-session-token", expectedRequest.SessionToken)
+	root := NewRootCommand(Options{
+		Out:   &stdout,
+		Err:   &stderr,
+		Viper: vp,
+		ApplySync: func(_ context.Context, request r2repo.Request) (r2repo.Result, error) {
+			assert.Equal(t, expectedRequest, request)
+
+			return expectedResult, nil
+		},
+	})
+	root.SetArgs([]string{
+		"apply-sync",
+		"--root", expectedRequest.Root,
+		"--bucket", expectedRequest.Bucket,
+		"--prefix", expectedRequest.Prefix,
+		"--endpoint", expectedRequest.Endpoint,
+	})
+	require.NoError(t, root.ExecuteContext(context.Background()))
+	assert.JSONEq(t, `{
+		"bucket":"meigma-packages",
+		"prefix":"_staging/",
+		"actions":[{"stage":"content","kind":"create","path":"apt/pool/fixture/new.deb"}],
+		"no_op":false,
+		"verified":true
 	}`, stdout.String())
 	assert.Empty(t, stderr.String())
 }
