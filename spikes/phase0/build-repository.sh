@@ -15,6 +15,7 @@ esac
 export GNUPGHOME=/work/gnupg
 key_uid='Meigma Phase 0 <phase0@meigma.dev>'
 package_name=meigma-phase0
+deb_arch=$(dpkg --print-architecture)
 
 rm -rf -- "$repo_root"
 mkdir -p "$repo_root" "$GNUPGHOME" /work/build/payload
@@ -60,7 +61,8 @@ Description: Disposable package fixture for the Meigma Phase 0 proof
 EOF
 
 apt_root="$repo_root/apt"
-mkdir -p "$apt_root/pool/phase0" "$apt_root/dists/stable/phase0/binary-all"
+binary_dir="dists/stable/phase0/binary-${deb_arch}"
+mkdir -p "$apt_root/pool/phase0" "$apt_root/$binary_dir"
 dpkg-deb --root-owner-group --build "$deb_root" \
   "$apt_root/pool/phase0/${package_name}_${version}_all.deb" >/dev/null
 
@@ -92,15 +94,19 @@ cp "$rpm_top/RPMS/noarch/${package_name}-${version}-1.noarch.rpm" "$rpm_root/noa
 
 (
   cd "$apt_root"
-  apt-ftparchive packages pool/phase0 > dists/stable/phase0/binary-all/Packages
-  gzip -9n -c dists/stable/phase0/binary-all/Packages \
-    > dists/stable/phase0/binary-all/Packages.gz
+  apt-ftparchive packages pool/phase0 > "$binary_dir/Packages"
+  gzip -9n -c "$binary_dir/Packages" > "$binary_dir/Packages.gz"
 
   for index in Packages Packages.gz; do
-    index_path="dists/stable/phase0/binary-all/$index"
-    digest=$(sha256sum "$index_path" | awk '{ print $1 }')
-    mkdir -p dists/stable/phase0/binary-all/by-hash/SHA256
-    cp "$index_path" "dists/stable/phase0/binary-all/by-hash/SHA256/$digest"
+    index_path="$binary_dir/$index"
+    for algorithm in SHA256 SHA512; do
+      case "$algorithm" in
+        SHA256) digest=$(sha256sum "$index_path" | awk '{ print $1 }') ;;
+        SHA512) digest=$(sha512sum "$index_path" | awk '{ print $1 }') ;;
+      esac
+      mkdir -p "$binary_dir/by-hash/$algorithm"
+      cp "$index_path" "$binary_dir/by-hash/$algorithm/$digest"
+    done
   done
 
   apt-ftparchive \
@@ -108,7 +114,7 @@ cp "$rpm_top/RPMS/noarch/${package_name}-${version}-1.noarch.rpm" "$rpm_root/noa
     -o APT::FTPArchive::Release::Label=Meigma \
     -o APT::FTPArchive::Release::Suite=stable \
     -o APT::FTPArchive::Release::Codename=stable \
-    -o APT::FTPArchive::Release::Architectures=all \
+    -o APT::FTPArchive::Release::Architectures="$deb_arch" \
     -o APT::FTPArchive::Release::Components=phase0 \
     -o APT::FTPArchive::Release::Acquire-By-Hash=yes \
     -o APT::FTPArchive::Release::Description='Meigma Phase 0 repository' \
@@ -137,6 +143,7 @@ EOF
 gpg --batch --armor --export "$primary_fingerprint" > "$repo_root/meigma.asc"
 printf '%s\n' "$primary_fingerprint" > "$repo_root/primary-fingerprint.txt"
 printf '%s\n' "$signing_fingerprint" > "$repo_root/signing-fingerprint.txt"
+printf '%s\n' "$deb_arch" > "$repo_root/deb-architecture.txt"
 
 verify_home=/work/verify-gnupg
 rm -rf -- "$verify_home"
@@ -149,5 +156,5 @@ GNUPGHOME="$verify_home" gpg --batch --verify \
 GNUPGHOME="$verify_home" gpg --batch --verify \
   "$rpm_root/repodata/repomd.xml.asc" "$rpm_root/repodata/repomd.xml" >/dev/null 2>&1
 
-printf 'built version=%s primary=%s signing=%s\n' \
-  "$version" "$primary_fingerprint" "$signing_fingerprint"
+printf 'built version=%s deb_arch=%s primary=%s signing=%s\n' \
+  "$version" "$deb_arch" "$primary_fingerprint" "$signing_fingerprint"

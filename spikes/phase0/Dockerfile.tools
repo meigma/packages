@@ -11,6 +11,7 @@ RUN apt-get update \
         gnupg \
         python3 \
         rpm \
+        shellcheck \
     && rm -rf /var/lib/apt/lists/*
 
 COPY build-repository.sh /usr/local/bin/build-repository

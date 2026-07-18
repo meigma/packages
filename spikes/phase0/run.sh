@@ -54,10 +54,11 @@ EOF
 done
 
 echo "testing DNF client: $fedora_image"
-docker run --rm --network "$network_name" "$fedora_image" sh -ceu '
+  docker run --rm --network "$network_name" "$fedora_image" sh -ceu '
   curl -fsS http://phase0-repo:8080/rpm/phase0/meigma.repo \
     -o /etc/yum.repos.d/meigma-phase0.repo
-  dnf -y --setopt=install_weak_deps=False install meigma-phase0 >/dev/null
+  dnf -y --disablerepo="*" --enablerepo=meigma-phase0 \
+    --setopt=install_weak_deps=False install meigma-phase0 >/dev/null
   test "$(meigma-phase0)" = "meigma-phase0 1.0.0"
   echo "DNF install passed: $(meigma-phase0)"
 '
