@@ -153,4 +153,18 @@ dnf_expect_signature_failure 'new repomd.xml.asc with old repomd.xml'
 run_tools cp /work/new/rpm/phase0/repodata/repomd.xml /work/live/rpm/phase0/repodata/repomd.xml
 dnf_expect_version 1.1.0
 
-echo 'Fault-injection result: APT remained installable; both RPM activation orders had a signature-failure window.'
+echo 'stage 5c: probe a transition file containing old and new detached signatures'
+run_tools sh -ceu '
+  cp /work/old/rpm/phase0/repodata/repomd.xml \
+    /work/live/rpm/phase0/repodata/repomd.xml
+  cat /work/old/rpm/phase0/repodata/repomd.xml.asc \
+    /work/new/rpm/phase0/repodata/repomd.xml.asc \
+    > /work/live/rpm/phase0/repodata/repomd.xml.asc
+'
+dnf_expect_version 1.0.0
+run_tools cp /work/new/rpm/phase0/repodata/repomd.xml /work/live/rpm/phase0/repodata/repomd.xml
+dnf_expect_signature_failure 'new repomd.xml with an old-first transition signature file'
+run_tools cp /work/new/rpm/phase0/repodata/repomd.xml.asc /work/live/rpm/phase0/repodata/repomd.xml.asc
+dnf_expect_version 1.1.0
+
+echo 'Fault-injection result: APT remained installable; RPM activation orders and the transition-signature probe retained a signature-failure window.'

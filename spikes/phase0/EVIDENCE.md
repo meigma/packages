@@ -83,6 +83,12 @@ DNF5's `makecache` command can log the bad signature and still return success
 after disabling the repository. The fault assertion therefore attempts a real
 package installation; that operation fails until the matching pair is active.
 
+A transition file formed by concatenating the old and new armored detached
+signatures does not remove the window. DNF accepted the old `repomd.xml` when
+its matching signature appeared first, but rejected the new `repomd.xml`
+instead of continuing to the second matching signature. Reversing the order
+would only reverse which snapshot works.
+
 ## Gate assessment
 
 - Package format generation: **passed**.
