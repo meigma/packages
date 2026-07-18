@@ -8,8 +8,15 @@
 - `main` contains the repository-local `meigma-packages` Go/Cobra/Viper CLI,
   pinned mise toolchain, Moon root/docs projects, read-only CI, Dependabot, and
   Apache-2.0/MIT dual licensing from PR #1. PR #6 added the secrets-free
-  `build-local` vertical slice and `moon run root:phase1-proof`; the CLI still
-  has no release or container-publication workflow.
+  `build-local` vertical slice and `moon run root:phase1-proof`. PR #7 added
+  deterministic fixture-set `rebuild-local`, `plan-sync`, logical manifests,
+  and `moon run root:phase2-proof`; Phase 3 CI and unprivileged workflow
+  integration is the next incomplete phase.
+- Phase 2 rebuild equivalence is the logical manifest digest, not byte equality
+  of timestamp-bearing repository metadata or OpenPGP signatures. An unchanged
+  rebuild verifies retained package digests and repository signatures before
+  returning a no-op. Sync plans order content, indexes, activation metadata,
+  state, and finally deletion; no referenced candidate path may be deleted.
 - GitHub Releases are authoritative inputs; the APT/RPM tree on R2 is derived
   and reconstructable. Build and verify a candidate tree before any remote
   mutation.
