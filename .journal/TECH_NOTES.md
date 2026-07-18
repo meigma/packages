@@ -13,12 +13,14 @@
   and `moon run root:phase2-proof`. PR #8 added `validate-request`, manual
   fixture-backed publish/rebuild validation workflows, pinned actionlint and
   ShellCheck, executable workflow/image policy, and the initial operations
-  boundary; Phase 4 staging provisioning and rehearsal is next.
-- Phase 3 workflows are deliberately manual, read-only, GitHub-hosted, and
-  disconnected from secrets, deployment environments, R2, and remote mutation.
-  Phase 4 must introduce a separate privileged mutation job and deliberately
-  revise the policy boundary rather than adding credentials to existing
-  validation jobs.
+  boundary. PR #9 added exact-prefix R2 apply and verification, passphrase-file
+  signing, and the protected staging rehearsal; Phase 4 is complete and Phase 5
+  production/consumer integration is next.
+- Phase 3 validation remains manual, read-only, GitHub-hosted, and disconnected
+  from secrets, deployment environments, R2, and remote mutation. The Phase 4
+  publish workflow keeps that job as an unprivileged prerequisite and performs
+  mutation only in a separate serialized job protected by the `staging`
+  environment. Routine CI cannot select the privileged Moon task.
 - Phase 2 rebuild equivalence is the logical manifest digest, not byte equality
   of timestamp-bearing repository metadata or OpenPGP signatures. An unchanged
   rebuild verifies retained package digests and repository signatures before
@@ -41,7 +43,15 @@
   `Contents: write`, installed only on `meigma/packages`. Approved consumer
   workflows receive selected-repository organization configuration and mint
   short-lived tokens restricted to the `packages` repository.
-- R2/domain/cache configuration, signing material, protected environments, and
-  GitHub App registration are Josh-owned external actions deferred until the
-  secrets-free phases are green. They are now the prerequisite owner actions
-  for Phase 4 staging rehearsal.
+- Staging uses R2 bucket `meigma-packages`, custom domain `pkgs.meigma.dev`, and
+  exact prefix `_staging/`; the managed `r2.dev` endpoint is disabled. The
+  publisher fails closed unless both the prefix and public staging URL match.
+  Cloudflare cache rules were installed manually because the available API
+  tokens lacked Rulesets permission; live staging objects return `no-store`
+  and remain uncached.
+- The production repository key is Ed25519 primary
+  `9C74476A669465EEB8D46AD8B0E68773B6E259F6` with signing subkey
+  `9DA41FD9DBD38B19AC75454D27CCA9E924245272`. Backups and the one-year
+  prefix-scoped R2 credential live in the 1Password `Homelab` vault; GitHub has
+  only the signing-only export and passphrase. Renew or replace the credential
+  before `2027-07-18T19:51:37Z`.
