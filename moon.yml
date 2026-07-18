@@ -65,6 +65,16 @@ tasks:
     options:
       cache: false
 
+  phase1-proof:
+    command: 'scripts/phase1-local.sh'
+    inputs:
+      - '@group(goSources)'
+      - 'scripts/phase1-local.sh'
+      - 'testdata/phase1/projects.yml'
+      - 'spikes/phase0/**/*'
+    options:
+      cache: false
+
   check:
     deps:
       - 'root:format'

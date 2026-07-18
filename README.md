@@ -43,6 +43,21 @@ go run ./cmd/meigma-packages --help
 go run ./cmd/meigma-packages --version
 ```
 
+## Local candidate proof
+
+The Phase 1 vertical slice builds fixture release assets into a signed and
+verified APT/RPM candidate tree, then installs the fixture from a clean Debian
+container:
+
+```sh
+moon run root:phase1-proof
+```
+
+The proof uses only Docker and the pinned local toolchain. It creates a
+throwaway signing key and temporary output, invokes the durable
+`meigma-packages build-local` command, and removes all generated state when it
+finishes. It does not access GitHub Releases, R2, or production credentials.
+
 The entrypoint under `cmd/meigma-packages` remains thin. Cobra/Viper command
 construction lives under `internal/cli`, with `MEIGMA_PACKAGES_*` reserved as
 the environment-variable prefix for future configuration.
