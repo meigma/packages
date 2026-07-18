@@ -22,3 +22,8 @@ Josh confirmed that work should advance to Phase 2. Created isolated Worktrunk b
 The slice adds strict registry decoding with retention and checksum patterns, stable semantic-version selection, DEB/RPM metadata inspection, streaming SHA-256 verification, reconstructable logical manifests, verified same-input no-op behavior, empty-root rebuild equivalence, and ordered filesystem sync plans with all deletions last. New CLI commands are `rebuild-local` and `plan-sync`; Phase 1's `build-local` remains compatible.
 
 Added `moon run root:phase2-proof`, which dynamically builds three releases, retains the newest two, proves a verified no-op, rebuilds the same logical digest from an empty root, and exercises interruption before every planned action to show retained content is never deleted. `root:check`, `root:phase1-proof`, `root:phase2-proof`, `go test -race ./...`, and `git diff --check` pass. The branch is committed locally and ready for GitHub review/delivery.
+
+## 2026-07-18 09:20 — Phase 2 merged
+Published PR #7 (`feat(cli): add deterministic rebuild planning`) from exact head `d1171a2de219376b5af9095742224d5097afe1ff`. Hosted CI and Kusari Inspector passed on that head. Squash-merged to `main` as `d3b67865c258ce81e3d4e7f40a5f000870e2581f`, then verified the post-merge CI run `29651724124` passed.
+
+Fast-forwarded the primary `main` worktree, removed the integrated Worktrunk feature worktree/local branch, deleted the remote feature branch, and confirmed `main` is clean and synchronized. Phase 2's proposal gate is satisfied; Phase 3 is the first incomplete phase.
