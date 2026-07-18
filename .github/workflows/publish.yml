@@ -13,6 +13,11 @@ on:
         required: true
         default: v1.0.0
         type: string
+      apply_staging:
+        description: Apply the verified fixture candidate to the protected staging prefix
+        required: true
+        default: false
+        type: boolean
 
 permissions: {}
 
@@ -48,3 +53,46 @@ jobs:
 
       - name: Prove the local publish path
         run: moon run root:phase1-proof
+
+  staging:
+    name: Publish and verify the protected staging prefix
+    if: ${{ inputs.apply_staging }}
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    environment:
+      name: staging
+      url: https://pkgs.meigma.dev/_staging/
+    concurrency:
+      group: meigma-packages-r2-staging
+      cancel-in-progress: false
+    env:
+      GOTOOLCHAIN: local
+      GPG_SIGNING_SUBKEY: ${{ secrets.GPG_SIGNING_SUBKEY }}
+      GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      GPG_PRIMARY_FINGERPRINT: ${{ vars.GPG_PRIMARY_FINGERPRINT }}
+      GPG_SIGNING_FINGERPRINT: ${{ vars.GPG_SIGNING_FINGERPRINT }}
+      MEIGMA_PACKAGES_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      MEIGMA_PACKAGES_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      MEIGMA_PACKAGES_R2_SESSION_TOKEN: ${{ secrets.R2_SESSION_TOKEN }}
+      R2_BUCKET: ${{ vars.R2_BUCKET }}
+      R2_PREFIX: ${{ vars.R2_PREFIX }}
+      R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+      PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL }}
+    steps:
+      - name: Checkout trusted workflow source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          version: 2026.6.14
+          cache: true
+
+      - name: Publish and verify staging
+        run: scripts/phase4-staging.sh

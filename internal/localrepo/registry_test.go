@@ -130,6 +130,28 @@ projects:
 	assert.Contains(t, err.Error(), "candidate root already exists")
 }
 
+func TestRequestValidateRejectsAnExposedPassphraseFile(t *testing.T) {
+	t.Parallel()
+
+	passphrasePath := filepath.Join(t.TempDir(), "passphrase")
+	require.NoError(t, os.WriteFile(passphrasePath, []byte("secret\n"), 0o644))
+	request := Request{
+		RegistryPath:          "/unused/projects.yml",
+		Project:               "phase1-fixture",
+		ReleaseDir:            "/unused/release",
+		Root:                  "/unused/candidate",
+		GNUPGHome:             "/unused/gnupg",
+		SigningKey:            "0123456789ABCDEF",
+		SigningPassphraseFile: passphrasePath,
+		BaseURL:               "https://pkgs.example.test/_staging",
+	}
+
+	err := request.validate()
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must not be accessible by group or others")
+}
+
 func TestValidateRequest(t *testing.T) {
 	t.Parallel()
 

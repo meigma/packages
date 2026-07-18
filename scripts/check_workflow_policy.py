@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Enforce the secrets-free workflow and pinned-image boundary for Phase 3."""
+"""Enforce the unprivileged and staging workflow trust boundaries."""
 
 from pathlib import Path
 import re
@@ -11,6 +11,7 @@ FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 USES = re.compile(r"^\s*(?:-\s+)?uses:\s*([^@\s]+)@([^\s#]+)")
 IMAGE_DIGEST = re.compile(r"@sha256:[0-9a-f]{64}$")
 IMAGE_ASSIGNMENT = re.compile(r"^[a-z0-9_]+_image=['\"]?([^'\"\s]+)")
+PRIVILEGED_WORKFLOWS = {"publish.yml"}
 
 
 def validate_workflow(path: Path) -> list[str]:
@@ -23,10 +24,29 @@ def validate_workflow(path: Path) -> list[str]:
         violations.append("top-level permissions must be empty")
     if re.search(r"(?m)^\s+(?:pull_request_target|workflow_run):", text):
         violations.append("privileged pull-request triggers are forbidden")
-    if "${{ secrets." in text:
-        violations.append("secrets are forbidden before Phase 4")
-    if re.search(r"(?m)^\s+environment:\s*", text):
-        violations.append("deployment environments are forbidden before Phase 4")
+    has_secrets = "${{ secrets." in text
+    has_environment = re.search(r"(?m)^\s+environment:\s*", text) is not None
+    if (has_secrets or has_environment) and path.name not in PRIVILEGED_WORKFLOWS:
+        violations.append("secrets and deployment environments require an approved privileged workflow")
+    if has_secrets or has_environment:
+        staging_marker = "\n  staging:\n"
+        staging_offset = text.find(staging_marker)
+        if staging_offset == -1:
+            violations.append("privileged configuration requires a dedicated staging job")
+        else:
+            unprivileged_jobs = text[:staging_offset]
+            if "${{ secrets." in unprivileged_jobs or re.search(
+                r"(?m)^\s+environment:\s*", unprivileged_jobs
+            ):
+                violations.append("secrets and environments must be confined to the staging job")
+        if not re.search(r"(?m)^\s+name:\s*staging\s*$", text):
+            violations.append("Phase 4 privileged jobs must use the staging environment")
+        if not re.search(r"(?m)^\s+needs:\s*validate\s*$", text):
+            violations.append("Phase 4 privileged jobs must depend on read-only validation")
+        if re.search(r"(?m)^\s+(?:pull_request|pull_request_target|workflow_run):", text):
+            violations.append("privileged workflows must not use pull-request-derived triggers")
+        if "production" in text.lower():
+            violations.append("production workflow configuration is forbidden during Phase 4")
     if re.search(r"(?m)^\s+[a-z-]+:\s*write\s*$", text):
         violations.append("write permissions are forbidden before Phase 4")
     if "self-hosted" in text:
