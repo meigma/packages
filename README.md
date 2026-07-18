@@ -70,3 +70,13 @@ a released product.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow and
 [SECURITY.md](SECURITY.md) for private vulnerability reporting.
+
+## License
+
+`meigma/packages` is dual-licensed under either of:
+
+- [Apache License, Version 2.0](LICENSE-APACHE)
+- [MIT License](LICENSE-MIT)
+
+at your option. See [LICENSE](LICENSE) for the dual-license notice and
+contribution terms.
