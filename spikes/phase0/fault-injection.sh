@@ -73,7 +73,9 @@ dnf_expect_signature_failure() {
   echo "DNF rejected mismatched activation objects: $label"
 }
 
-docker build --quiet --tag "$tools_image" --file "$script_dir/Dockerfile.tools" "$script_dir" >/dev/null
+docker build --quiet --tag "$tools_image" \
+  --build-arg "PHASE0_UID=$(id -u)" \
+  --file "$script_dir/Dockerfile.tools" "$script_dir" >/dev/null
 run_tools sh -ceu '
   build-repository /work/old 1.0.0
   build-repository /work/new 1.1.0

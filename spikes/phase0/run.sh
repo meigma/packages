@@ -18,7 +18,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
-docker build --quiet --tag "$tools_image" --file "$script_dir/Dockerfile.tools" "$script_dir" >/dev/null
+docker build --quiet --tag "$tools_image" \
+  --build-arg "PHASE0_UID=$(id -u)" \
+  --file "$script_dir/Dockerfile.tools" "$script_dir" >/dev/null
 docker run --rm --volume "$work_dir:/work" "$tools_image" \
   build-repository /work/repo 1.0.0
 
