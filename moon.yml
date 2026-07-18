@@ -85,12 +85,26 @@ tasks:
     options:
       cache: false
 
+  workflow-check:
+    command: 'scripts/phase3-ci.sh'
+    inputs:
+      - '.github/workflows/**/*'
+      - 'scripts/*.sh'
+      - 'scripts/check_workflow_policy.py'
+      - 'spikes/phase0/*.sh'
+      - 'mise.toml'
+      - 'mise.lock'
+    options:
+      cache: false
+      runInCI: true
+
   check:
     deps:
       - 'root:format'
       - 'root:lint'
       - 'root:build'
       - 'root:test'
+      - 'root:workflow-check'
       - 'docs:build'
     inputs:
       - '@group(goSources)'

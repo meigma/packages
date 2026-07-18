@@ -1,0 +1,43 @@
+name: Rebuild validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      project:
+        description: Fixture registry project to validate
+        required: true
+        default: phase2-fixture
+        type: string
+
+permissions: {}
+
+jobs:
+  validate:
+    name: Validate rebuild path without secrets
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      GOTOOLCHAIN: local
+      PROJECT: ${{ inputs.project }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          version: 2026.6.14
+          cache: true
+
+      - name: Validate request
+        run: >-
+          go run ./cmd/meigma-packages validate-request
+          --registry testdata/phase2/projects.yml
+          --project "$PROJECT"
+
+      - name: Prove the local rebuild path
+        run: moon run root:phase2-proof
