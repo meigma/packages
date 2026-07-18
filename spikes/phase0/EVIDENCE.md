@@ -97,7 +97,23 @@ would only reverse which snapshot works.
 - RPM no-half-publish invariant with direct multi-object publication:
   **blocked by a demonstrated signature-failure window**.
 
-Phase 1 should not encode RPM publication semantics until the owner chooses
-one of the proposal's escalation paths: accept and document a tightly bounded
-retry/unavailability window, introduce an atomic snapshot-routing design, or
-revise the invariant. This spike does not choose among them.
+The proof required an owner choice among accepting a tightly bounded
+retry/unavailability window, introducing an atomic snapshot-routing design, or
+otherwise revising the invariant. The recorded decision follows.
+
+## Owner decision
+
+On 2026-07-17, Josh approved the bounded fail-closed policy for v1. Durable
+publication may expose a brief RPM metadata-unavailability window between the
+two activation writes, but it must preserve these constraints:
+
+- bypass caches for `repomd.xml` and `repomd.xml.asc`;
+- write the matching pair consecutively with no unrelated work between them;
+- fail closed on signature mismatch and never bypass metadata verification;
+- perform no deletion until the matching pair is active and verified;
+- make an interrupted publish safely retryable and convergent;
+- verify package resolution or installation after publication rather than
+  trusting metadata-refresh exit status alone.
+
+An atomic routing layer remains a future option if production evidence shows
+that this bounded availability trade-off is unacceptable.
