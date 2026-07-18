@@ -7,14 +7,22 @@
   proposal as a waterfall specification.
 - `main` contains the repository-local `meigma-packages` Go/Cobra/Viper CLI,
   pinned mise toolchain, Moon root/docs projects, read-only CI, Dependabot, and
-  Apache-2.0/MIT dual licensing from PR #1. The CLI itself has no release or
-  container-publication workflow.
+  Apache-2.0/MIT dual licensing from PR #1. PR #6 added the secrets-free
+  `build-local` vertical slice and `moon run root:phase1-proof`; the CLI still
+  has no release or container-publication workflow.
 - GitHub Releases are authoritative inputs; the APT/RPM tree on R2 is derived
   and reconstructable. Build and verify a candidate tree before any remote
   mutation.
-- Client-visible consistency is an explicit Phase 0 proof gate: serialization
-  alone does not make multi-object R2 publication atomic, and Cloudflare custom
-  domain caching can expose stale activation metadata.
+- Phase 0 passed Ed25519 repository signing and clean installation on Debian 13,
+  Ubuntu 26.04 LTS, and Fedora 44. APT publication must retain both SHA-256 and
+  SHA-512 by-hash indexes; the tested modern clients requested SHA-512 and
+  otherwise fell back to the mutable index.
+- Direct static RPM publication has an unavoidable fail-closed interval between
+  `repomd.xml` and `repomd.xml.asc` writes. The approved v1 contract bypasses
+  caching for the mutable pair, writes them consecutively, never bypasses
+  verification, converges safely on retry, defers deletion until verification,
+  and proves package resolution or installation after publication. DNF5 cache
+  refresh success alone is insufficient because it may hide a disabled repo.
 - Cross-repository dispatch uses one private Meigma GitHub App with repository
   `Contents: write`, installed only on `meigma/packages`. Approved consumer
   workflows receive selected-repository organization configuration and mint
