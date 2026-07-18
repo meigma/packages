@@ -15,6 +15,12 @@ import (
 // LocalBuildFunc builds one verified local candidate tree.
 type LocalBuildFunc func(context.Context, localrepo.Request) (localrepo.Result, error)
 
+// LocalRebuildFunc rebuilds a candidate from fixture release sets.
+type LocalRebuildFunc func(context.Context, localrepo.RebuildRequest) (localrepo.RebuildResult, error)
+
+// SyncPlanFunc computes an ordered candidate-to-remote filesystem plan.
+type SyncPlanFunc func(string, string) (localrepo.SyncPlan, error)
+
 // BuildInfo describes build metadata printed by --version.
 type BuildInfo struct {
 	// Version identifies the CLI build.
@@ -39,6 +45,10 @@ type Options struct {
 	Viper *viper.Viper
 	// BuildLocal supplies the fixture-to-candidate implementation.
 	BuildLocal LocalBuildFunc
+	// RebuildLocal supplies the deterministic fixture-set rebuild implementation.
+	RebuildLocal LocalRebuildFunc
+	// PlanSync supplies the ordered filesystem planning implementation.
+	PlanSync SyncPlanFunc
 }
 
 // NewRootCommand creates the meigma-packages Cobra command tree.
@@ -57,6 +67,12 @@ func NewRootCommand(options Options) *cobra.Command {
 	}
 	if options.BuildLocal == nil {
 		options.BuildLocal = localrepo.Build
+	}
+	if options.RebuildLocal == nil {
+		options.RebuildLocal = localrepo.Rebuild
+	}
+	if options.PlanSync == nil {
+		options.PlanSync = localrepo.PlanSync
 	}
 	options.Build = options.Build.withDefaults()
 
@@ -85,6 +101,8 @@ func NewRootCommand(options Options) *cobra.Command {
 	root.SetOut(options.Out)
 	root.SetErr(options.Err)
 	root.AddCommand(newBuildLocalCommand(options))
+	root.AddCommand(newRebuildLocalCommand(options))
+	root.AddCommand(newPlanSyncCommand(options))
 
 	return root
 }

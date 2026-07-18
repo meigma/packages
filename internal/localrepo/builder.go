@@ -57,6 +57,12 @@ type builder struct {
 	runner commandRunner
 }
 
+type candidateAsset struct {
+	debPath         string
+	rpmPath         string
+	rpmArchitecture string
+}
+
 // Build creates and verifies a local APT/RPM candidate tree from fixture assets.
 func Build(ctx context.Context, request Request) (Result, error) {
 	instance := builder{runner: commandRunner{}}
@@ -73,15 +79,29 @@ func (instance builder) build(ctx context.Context, request Request) (Result, err
 	if err != nil {
 		return Result{}, err
 	}
+	assets := []candidateAsset{{
+		debPath: filepath.Join(request.ReleaseDir, project.Assets.DEB),
+		rpmPath: filepath.Join(request.ReleaseDir, project.Assets.RPM),
+	}}
+
+	return instance.buildCandidate(ctx, request, project, assets)
+}
+
+func (instance builder) buildCandidate(
+	ctx context.Context,
+	request Request,
+	project projectConfig,
+	assets []candidateAsset,
+) (Result, error) {
 	if rootErr := ensureNewRoot(request.Root); rootErr != nil {
 		return Result{}, rootErr
 	}
 
-	architecture, err := instance.buildAPT(ctx, request, project)
+	architecture, err := instance.buildAPT(ctx, request, assets)
 	if err != nil {
 		return Result{}, cleanupFailedBuild(request.Root, err)
 	}
-	if rpmErr := instance.buildRPM(ctx, request, project); rpmErr != nil {
+	if rpmErr := instance.buildRPM(ctx, request, assets); rpmErr != nil {
 		return Result{}, cleanupFailedBuild(request.Root, rpmErr)
 	}
 	if verifyErr := instance.exportAndVerify(ctx, request); verifyErr != nil {
@@ -119,7 +139,7 @@ func (request Request) validate() error {
 func (instance builder) buildAPT(
 	ctx context.Context,
 	request Request,
-	project projectConfig,
+	assets []candidateAsset,
 ) (string, error) {
 	architectureOutput, err := instance.runner.run(ctx, "", nil, "dpkg", "--print-architecture")
 	if err != nil {
@@ -133,8 +153,10 @@ func (instance builder) buildAPT(
 	if mkdirErr := os.MkdirAll(filepath.Join(aptRoot, binaryDir), directoryMode); mkdirErr != nil {
 		return "", fmt.Errorf("create APT index directory: %w", mkdirErr)
 	}
-	if copyErr := copyAsset(request.ReleaseDir, project.Assets.DEB, poolDir); copyErr != nil {
-		return "", copyErr
+	for _, asset := range assets {
+		if copyErr := copyAssetPath(asset.debPath, poolDir); copyErr != nil {
+			return "", copyErr
+		}
 	}
 
 	packages, err := instance.runner.run(
@@ -216,10 +238,20 @@ func (instance builder) writeAndSignRelease(
 	return nil
 }
 
-func (instance builder) buildRPM(ctx context.Context, request Request, project projectConfig) error {
+func (instance builder) buildRPM(
+	ctx context.Context,
+	request Request,
+	assets []candidateAsset,
+) error {
 	rpmRoot := filepath.Join(request.Root, "rpm", request.Project)
-	if err := copyAsset(request.ReleaseDir, project.Assets.RPM, filepath.Join(rpmRoot, "noarch")); err != nil {
-		return err
+	for _, asset := range assets {
+		architecture := asset.rpmArchitecture
+		if architecture == "" {
+			architecture = "noarch"
+		}
+		if err := copyAssetPath(asset.rpmPath, filepath.Join(rpmRoot, architecture)); err != nil {
+			return err
+		}
 	}
 	if _, err := instance.runner.run(ctx, "", nil, "createrepo_c", rpmRoot); err != nil {
 		return err
@@ -267,18 +299,38 @@ func (instance builder) exportAndVerify(ctx context.Context, request Request) er
 		return fmt.Errorf("write public key: %w", writeErr)
 	}
 
+	return instance.verifyRoot(ctx, request.Root)
+}
+
+func (instance builder) verifyRoot(ctx context.Context, root string) error {
+	publicKeyPath := filepath.Join(root, "meigma.asc")
 	verifyHome, err := os.MkdirTemp("", "meigma-packages-verify-*")
 	if err != nil {
 		return fmt.Errorf("create verification keyring: %w", err)
 	}
 	defer os.RemoveAll(verifyHome)
 	environment := []string{"GNUPGHOME=" + verifyHome}
-	if _, err := instance.runner.run(ctx, "", environment, "gpg", batchFlag, "--import", publicKeyPath); err != nil {
-		return err
+	if _, importErr := instance.runner.run(
+		ctx,
+		"",
+		environment,
+		"gpg",
+		batchFlag,
+		"--import",
+		publicKeyPath,
+	); importErr != nil {
+		return importErr
 	}
 
-	releaseDir := filepath.Join(request.Root, "apt", "dists", "stable")
-	repomdPath := filepath.Join(request.Root, "rpm", request.Project, "repodata", "repomd.xml")
+	releaseDir := filepath.Join(root, "apt", "dists", "stable")
+	rpmRoots, err := filepath.Glob(filepath.Join(root, "rpm", "*", "repodata", "repomd.xml"))
+	if err != nil {
+		return fmt.Errorf("locate RPM metadata: %w", err)
+	}
+	if len(rpmRoots) != 1 {
+		return fmt.Errorf("verify candidate: expected one RPM repository, got %d", len(rpmRoots))
+	}
+	repomdPath := rpmRoots[0]
 	verifications := [][]string{
 		{batchFlag, verifyFlag, filepath.Join(releaseDir, "InRelease")},
 		{batchFlag, verifyFlag, filepath.Join(releaseDir, "Release.gpg"), filepath.Join(releaseDir, "Release")},
@@ -314,8 +366,8 @@ func cleanupFailedBuild(root string, buildErr error) error {
 	return buildErr
 }
 
-func copyAsset(releaseDir string, name string, destinationDir string) error {
-	sourcePath := filepath.Join(releaseDir, name)
+func copyAssetPath(sourcePath string, destinationDir string) error {
+	name := filepath.Base(sourcePath)
 	source, err := os.Open(sourcePath)
 	if err != nil {
 		return fmt.Errorf("open release asset %s: %w", name, err)

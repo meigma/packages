@@ -1,0 +1,12 @@
+schema: 1
+
+defaults:
+  retention: 2
+
+projects:
+  phase2-fixture:
+    package_name: meigma-phase0
+    assets:
+      checksums: checksums.txt
+      deb: 'meigma-phase0_*_all.deb'
+      rpm: 'meigma-phase0-*-1.noarch.rpm'

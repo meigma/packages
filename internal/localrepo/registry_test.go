@@ -32,6 +32,7 @@ projects:
 			project: "phase1-fixture",
 			want: projectConfig{
 				PackageName: "meigma-phase0",
+				Retention:   5,
 				Assets: assetConfig{
 					DEB: "meigma-phase0_1.0.0_all.deb",
 					RPM: "meigma-phase0-1.0.0-1.noarch.rpm",
@@ -65,6 +66,20 @@ projects:
 `,
 			project:     "phase1-fixture",
 			errorSubstr: "field assets.rpm is required",
+		},
+		{
+			name: "rejects unknown registry fields",
+			registry: `schema: 1
+projects:
+  phase1-fixture:
+    package_name: meigma-phase0
+    typo: true
+    assets:
+      deb: meigma-phase0_1.0.0_all.deb
+      rpm: meigma-phase0-1.0.0-1.noarch.rpm
+`,
+			project:     "phase1-fixture",
+			errorSubstr: "field typo not found",
 		},
 	}
 

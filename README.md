@@ -58,6 +58,22 @@ throwaway signing key and temporary output, invokes the durable
 `meigma-packages build-local` command, and removes all generated state when it
 finishes. It does not access GitHub Releases, R2, or production credentials.
 
+## Deterministic rebuild proof
+
+The Phase 2 slice adds fixture release-set validation, semantic-version
+retention, checksum and package-metadata inspection, logical state manifests,
+verified same-input no-ops, and ordered filesystem sync planning:
+
+```sh
+moon run root:phase2-proof
+```
+
+The proof builds three fixture releases, retains the newest two, verifies that
+the same input is a no-op, rebuilds the same logical tree from an empty root,
+and confirms that every planned deletion follows content and metadata
+activation. It remains local and secrets-free; GitHub Release discovery, R2
+transport, and production signing material are later phases.
+
 The entrypoint under `cmd/meigma-packages` remains thin. Cobra/Viper command
 construction lives under `internal/cli`, with `MEIGMA_PACKAGES_*` reserved as
 the environment-variable prefix for future configuration.
