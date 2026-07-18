@@ -130,6 +130,71 @@ projects:
 	assert.Contains(t, err.Error(), "candidate root already exists")
 }
 
+func TestValidateRequest(t *testing.T) {
+	t.Parallel()
+
+	registryPath := writeRegistry(t, `schema: 1
+projects:
+  phase3-fixture:
+    package_name: meigma-phase0
+    assets:
+      deb: meigma-phase0_1.0.0_all.deb
+      rpm: meigma-phase0-1.0.0-1.noarch.rpm
+`)
+	tests := []struct {
+		name        string
+		project     string
+		tag         string
+		want        RequestValidation
+		errorSubstr string
+	}{
+		{
+			name:    "accepts a registered rebuild project without a tag",
+			project: "phase3-fixture",
+			want:    RequestValidation{Project: "phase3-fixture"},
+		},
+		{
+			name:    "accepts a registered publish project and stable tag",
+			project: "phase3-fixture",
+			tag:     "v2.1.0",
+			want:    RequestValidation{Project: "phase3-fixture", Tag: "v2.1.0"},
+		},
+		{
+			name:        "rejects an unsafe project name",
+			project:     "../phase3-fixture",
+			errorSubstr: "must use lowercase letters, numbers, and single hyphens",
+		},
+		{
+			name:        "rejects an unknown project",
+			project:     "missing",
+			errorSubstr: "is not registered",
+		},
+		{
+			name:        "rejects a prerelease tag",
+			project:     "phase3-fixture",
+			tag:         "v2.1.0-rc.1",
+			errorSubstr: "stable v-prefixed semantic version",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := ValidateRequest(registryPath, test.project, test.tag)
+			if test.errorSubstr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), test.errorSubstr)
+
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, test.want, got)
+		})
+	}
+}
+
 func writeRegistry(t *testing.T, content string) string {
 	t.Helper()
 

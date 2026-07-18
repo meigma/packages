@@ -457,7 +457,7 @@ func digestFile(path string) (string, error) {
 func parseVersion(tag string) ([3]int, error) {
 	matches := versionPattern.FindStringSubmatch(tag)
 	if matches == nil {
-		return [3]int{}, fmt.Errorf("release directory %q must be a stable v-prefixed semantic version", tag)
+		return [3]int{}, fmt.Errorf("release tag %q must be a stable v-prefixed semantic version", tag)
 	}
 	var version [3]int
 	for index := range version {

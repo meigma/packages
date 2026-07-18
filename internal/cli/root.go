@@ -21,6 +21,9 @@ type LocalRebuildFunc func(context.Context, localrepo.RebuildRequest) (localrepo
 // SyncPlanFunc computes an ordered candidate-to-remote filesystem plan.
 type SyncPlanFunc func(string, string) (localrepo.SyncPlan, error)
 
+// ValidateRequestFunc validates an unprivileged workflow request.
+type ValidateRequestFunc func(string, string, string) (localrepo.RequestValidation, error)
+
 // BuildInfo describes build metadata printed by --version.
 type BuildInfo struct {
 	// Version identifies the CLI build.
@@ -49,6 +52,8 @@ type Options struct {
 	RebuildLocal LocalRebuildFunc
 	// PlanSync supplies the ordered filesystem planning implementation.
 	PlanSync SyncPlanFunc
+	// ValidateRequest supplies unprivileged project and tag validation.
+	ValidateRequest ValidateRequestFunc
 }
 
 // NewRootCommand creates the meigma-packages Cobra command tree.
@@ -73,6 +78,9 @@ func NewRootCommand(options Options) *cobra.Command {
 	}
 	if options.PlanSync == nil {
 		options.PlanSync = localrepo.PlanSync
+	}
+	if options.ValidateRequest == nil {
+		options.ValidateRequest = localrepo.ValidateRequest
 	}
 	options.Build = options.Build.withDefaults()
 
@@ -103,6 +111,7 @@ func NewRootCommand(options Options) *cobra.Command {
 	root.AddCommand(newBuildLocalCommand(options))
 	root.AddCommand(newRebuildLocalCommand(options))
 	root.AddCommand(newPlanSyncCommand(options))
+	root.AddCommand(newValidateRequestCommand(options))
 
 	return root
 }

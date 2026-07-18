@@ -185,3 +185,31 @@ func TestPlanSyncCommandPrintsTheResolvedPlan(t *testing.T) {
 	}`, stdout.String())
 	assert.Empty(t, stderr.String())
 }
+
+func TestValidateRequestCommandPassesResolvedInputAndPrintsResult(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	root := NewRootCommand(Options{
+		Out: &stdout,
+		Err: &stderr,
+		ValidateRequest: func(registry string, project string, tag string) (localrepo.RequestValidation, error) {
+			assert.Equal(t, "/fixtures/projects.yml", registry)
+			assert.Equal(t, "phase3-fixture", project)
+			assert.Equal(t, "v2.1.0", tag)
+
+			return localrepo.RequestValidation{Project: project, Tag: tag}, nil
+		},
+	})
+	root.SetArgs([]string{
+		"validate-request",
+		"--registry", "/fixtures/projects.yml",
+		"--project", "phase3-fixture",
+		"--tag", "v2.1.0",
+	})
+
+	require.NoError(t, root.ExecuteContext(context.Background()))
+	assert.JSONEq(t, `{"project":"phase3-fixture","tag":"v2.1.0"}`, stdout.String())
+	assert.Empty(t, stderr.String())
+}

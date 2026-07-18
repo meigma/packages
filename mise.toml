@@ -18,6 +18,8 @@ python = "3.14.3"
 
 # Explicit aqua references select mise's verifying backend.
 "aqua:golangci/golangci-lint" = "2.12.2"
+"aqua:koalaman/shellcheck" = "0.11.0"
+"aqua:rhysd/actionlint" = "1.7.12"
 "aqua:astral-sh/uv" = "0.11.0"
 "aqua:moonrepo/moon" = "2.3.5"
 
