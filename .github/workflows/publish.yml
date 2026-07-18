@@ -95,4 +95,4 @@ jobs:
           cache: true
 
       - name: Publish and verify staging
-        run: moon run root:phase4-staging
+        run: scripts/phase4-staging.sh
