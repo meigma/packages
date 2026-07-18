@@ -1,0 +1,80 @@
+language: 'go'
+layer: 'application'
+stack: 'backend'
+
+project:
+  title: 'meigma-packages'
+  description: 'Repository-local CLI for building Meigma package repositories.'
+  owner: 'meigma'
+  maintainers:
+    - 'meigma'
+
+# Every task runs against `system` binaries that mise (mise.toml + mise.lock) puts
+# on PATH; moon manages no language toolchain itself.
+toolchains:
+  default: 'system'
+
+fileGroups:
+  goSources:
+    - 'cmd/**/*.go'
+    - 'internal/**/*.go'
+    - 'go.mod'
+    - 'go.sum'
+    # Tool/version pins. Under the `system` toolchain moon does not hash the Go
+    # binary's version, so the mise pins are inputs here too — bumping Go (or any
+    # tool) in mise must invalidate the cacheable build task.
+    - 'mise.toml'
+    - 'mise.lock'
+  lintConfig:
+    - '.golangci.yml'
+    - 'mise.toml'
+    - 'mise.lock'
+
+workspace:
+  inheritedTasks:
+    include: []
+
+tasks:
+  format:
+    command: 'golangci-lint fmt --config .golangci.yml --diff'
+    inputs:
+      - '@group(goSources)'
+      - '@group(lintConfig)'
+    options:
+      cache: false
+
+  lint:
+    command: 'golangci-lint run --config .golangci.yml ./... --show-stats=false'
+    inputs:
+      - '@group(goSources)'
+      - '@group(lintConfig)'
+    options:
+      cache: false
+
+  build:
+    command: 'go build -o bin/meigma-packages ./cmd/meigma-packages'
+    inputs:
+      - '@group(goSources)'
+    outputs:
+      - 'bin/meigma-packages'
+
+  test:
+    command: 'go test ./...'
+    inputs:
+      - '@group(goSources)'
+    options:
+      cache: false
+
+  check:
+    deps:
+      - 'root:format'
+      - 'root:lint'
+      - 'root:build'
+      - 'root:test'
+      - 'docs:build'
+    inputs:
+      - '@group(goSources)'
+      - '@group(lintConfig)'
+    options:
+      cache: false
+      runInCI: true

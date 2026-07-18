@@ -1,0 +1,38 @@
+# Shared Moon workspace configuration for meigma-packages.
+# Keep the root CLI and its local documentation explicit. Add discovery globs
+# only if the repository grows beyond these two projects.
+
+projects:
+  globs: []
+  sources:
+    root: '.'
+    docs: 'docs'
+
+  # Uncomment to auto-discover more projects if the repository grows.
+  # globs:
+  #   - 'packages/*'
+  #   - 'tools/*'
+  #
+  # Uncomment if glob-discovered IDs are likely to collide.
+  # globFormat: 'source-path'
+
+defaultProject: 'root'
+
+vcs:
+  defaultBranch: 'main'
+  provider: 'github'
+
+pipeline:
+  installDependencies: false
+
+# Uncomment when you want Moon to aggregate project owners into CODEOWNERS.
+# codeowners:
+#   sync: true
+
+# Uncomment after you start tagging and layering projects and want
+# Moon to enforce project boundaries.
+# constraints:
+#   enforceLayerRelationships: true
+#   tagRelationships:
+#     frontend: ['shared-ui', 'typescript']
+#     backend: ['data', 'shared-kernel']
