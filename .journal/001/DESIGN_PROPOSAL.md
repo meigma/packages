@@ -3,6 +3,7 @@
 - Status: Proposal for review
 - Session: 001
 - Date: 2026-07-17
+- Revision: Use one Meigma GitHub App for cross-repository dispatch
 - Source contract: `meigma/packages` jumpstart supplied for this session
 
 ## 1. Executive summary
@@ -33,7 +34,7 @@ The design preserves the jumpstart's adopted defaults:
 - RPM under `/rpm/<project>`;
 - metadata signatures in v1, package signatures later;
 - five retained versions by default;
-- PAT-based repository dispatch in v1, with a documented GitHub App upgrade;
+- one private Meigma GitHub App for short-lived cross-repository dispatch;
 - daily and post-publish smoke tests;
 - no new paid service or account without approval.
 
@@ -61,7 +62,7 @@ The design preserves the jumpstart's adopted defaults:
 - package-level RPM or DEB signatures in v1;
 - Windows or macOS distribution;
 - COPR, PPA, OBS, or other distro-native channels;
-- GitHub App dispatch authentication in v1;
+- PAT-based dispatch authentication;
 - building project binaries or replacing GoReleaser/nfpm;
 - using R2 as the artifact of record;
 - a package repository web application, database, or control plane.
@@ -647,15 +648,68 @@ Only the notification job needs `issues: write`.
 
 ## 15. Authentication and secret handling
 
-### 15.1 Consumer dispatch
+### 15.1 Single GitHub App for consumer dispatch
 
-Each consumer stores `MEIGMA_PACKAGES_DISPATCH`, a fine-grained PAT scoped to
-the `meigma/packages` repository. GitHub's current REST documentation requires
-`Contents: write` for creating a repository dispatch event; there is not a
-separate repository-dispatch permission. The onboarding guide should state
-that exact scope and show the small JSON payload.
+V1 uses one private, Meigma-owned GitHub App as the cross-repository automation
+identity. This explicitly supersedes the jumpstart's PAT default.
 
-The README records the GitHub App upgrade path, but v1 does not build it.
+The App should be registered with:
+
+- repository permission `Contents: write`, which GitHub requires for the
+  create-repository-dispatch endpoint;
+- no organization permissions;
+- no webhook subscriptions, callback URL, or user authorization flow;
+- installation access limited to the `meigma/packages` repository;
+- no repository-ruleset bypass role.
+
+The App does not need installation access to consumer repositories. Approved
+consumer workflows receive the App client ID through an organization Actions
+variable and the App private key through an organization Actions secret, both
+restricted to the participating consumer repositories. Suggested names are:
+
+- `MEIGMA_PACKAGES_APP_CLIENT_ID`;
+- `MEIGMA_PACKAGES_APP_PRIVATE_KEY`.
+
+After a consumer publishes its GitHub Release, its trusted release workflow:
+
+1. invokes `actions/create-github-app-token` pinned to a full commit SHA;
+2. requests an installation token for owner `meigma`, repository `packages`,
+   and `permission-contents: write`;
+3. sends `POST /repos/meigma/packages/dispatches` with event type
+   `publish-package` and the `{project, tag}` payload;
+4. allows the action to revoke the installation token when the job finishes.
+
+The shared consumer-workflow fragment should have this shape (the delivered
+template replaces the action placeholder with a reviewed full commit SHA):
+
+```yaml
+- name: Mint packages dispatch token
+  id: packages-app
+  uses: actions/create-github-app-token@<reviewed-full-commit-sha> # v3
+  with:
+    client-id: ${{ vars.MEIGMA_PACKAGES_APP_CLIENT_ID }}
+    private-key: ${{ secrets.MEIGMA_PACKAGES_APP_PRIVATE_KEY }}
+    owner: meigma
+    repositories: packages
+    permission-contents: write
+
+- name: Request package publication
+  env:
+    GH_TOKEN: ${{ steps.packages-app.outputs.token }}
+    PROJECT: ${{ github.event.repository.name }}
+    RELEASE_TAG: ${{ github.ref_name }}
+  run: |
+    gh api --method POST repos/meigma/packages/dispatches \
+      -f event_type=publish-package \
+      -F client_payload[project]="$PROJECT" \
+      -F client_payload[tag]="$RELEASE_TAG"
+```
+
+Installation tokens currently expire after one hour even if not revoked. The
+private key is the only long-lived GitHub dispatch credential and is centrally
+rotated once rather than maintaining PATs in every consumer. The token-minting
+step must run only from trusted release workflow code, never from pull-request
+jobs or attacker-controlled scripts.
 
 ### 15.2 R2 credentials
 
@@ -753,7 +807,8 @@ service or account is proposed.
 - cache policy checklist;
 - signing-key fingerprint and link to the signing runbook;
 - disaster recovery: run staging rebuild, verify, then production rebuild;
-- GitHub App upgrade path;
+- GitHub App ownership, installation, private-key rotation, and incident
+  revocation procedure;
 - status/limitations, including metadata-only signing in v1.
 
 ### `docs/onboarding.md`
@@ -761,9 +816,11 @@ service or account is proposed.
 - nfpm expectations and supported architectures;
 - asset/checksum naming contract;
 - registry-entry example;
-- exact fine-grained PAT permission (`Contents: write` on
-  `meigma/packages`);
-- copy-paste dispatch step pinned to a trusted API/action path;
+- required organization variable/secret names and selected-repository access;
+- copy-paste GitHub App token and dispatch steps with the action pinned to a
+  full commit SHA;
+- explanation that the App is installed only on `meigma/packages`, not granted
+  write access to consumers;
 - manual re-publish procedure;
 - onboarding validation checklist.
 
@@ -856,7 +913,7 @@ workflow reliably triggers queued publication.
 | R2 API token | Consumption code only | Create and store secrets |
 | GPG primary/subkey | Runbook and CI importer | Generate offline and store secrets |
 | Cache rules | Document and verify | Apply in Cloudflare |
-| Consumer PAT | Document dispatch contract | Create/store in consumer repo |
+| Dispatch GitHub App | Document token/dispatch contract | Register App, install only on `meigma/packages`, and scope the organization variable/secret to consumers |
 | `incus-gh-runner` workflow change | Ready-to-apply patch/PR | Approve and merge in that repo |
 | Spend/new account/invariant deviation | Stop and explain | Decide |
 
@@ -869,7 +926,7 @@ workflow reliably triggers queued publication.
 | Ed25519 fails on a supported RPM client | Run real client matrix in Phase 0 | Use documented RSA fallback and announce evidence |
 | Asset patterns do not match real releases | Inspect `incus-gh-runner` release before finalizing registry entry | Source release contract requires a broader redesign |
 | Release checksum file is incomplete/ambiguous | Fail closed and inspect package metadata | Consumer release workflow must change materially |
-| Signing subkey or R2 credentials leak | Protected environments, ephemeral files, minimal job permissions | Any secret appears in logs/artifacts or untrusted job context |
+| App private key, signing subkey, or R2 credentials leak | Selected-repository secrets, protected environments, ephemeral files, minimal job permissions | Any secret appears in logs/artifacts or untrusted job context |
 | Queue overflow or stuck publish blocks later releases | Job timeout, visible queue, manual re-dispatch/rebuild runbook | Queue cannot preserve all legitimate release events |
 | Retention removes a still-referenced object | Candidate validation, activation before delete, skip delete on any error | Fault injection finds a 404 reachable from valid metadata |
 
@@ -901,15 +958,21 @@ When the secrets-free work is ready, ask Josh to:
 7. generate the offline primary and CI signing subkey from the reviewed runbook;
 8. add the signing-subkey/passphrase secrets and expected fingerprint;
 9. configure environment protection and allowed deployment branches;
-10. create the fine-grained dispatch PAT and add it to `incus-gh-runner` only
-    after the target workflow is ready.
+10. register the private Meigma dispatch GitHub App with only repository
+    `Contents: write` permission and install it only on `meigma/packages`;
+11. store its client ID as an organization Actions variable and private key as
+    an organization Actions secret, each limited to approved consumer repos;
+12. add `incus-gh-runner` to that selected-repository access only after its
+    pinned token/dispatch workflow is ready.
 
 ## 24. Evidence anchors
 
 The following current primary documentation informed the proposal:
 
 - [GitHub Actions concurrency](https://docs.github.com/en/actions/concepts/workflows-and-actions/concurrency): concurrency groups and queued runs.
-- [GitHub repository dispatch REST endpoint](https://docs.github.com/en/rest/repos/repos#create-a-repository-dispatch-event): payload limits and fine-grained `Contents: write` permission.
+- [GitHub repository dispatch REST endpoint](https://docs.github.com/en/rest/repos/repos#create-a-repository-dispatch-event): GitHub App installation-token support, payload limits, and required repository `Contents: write` permission.
+- [GitHub App authentication in Actions](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/making-authenticated-api-requests-with-a-github-app-in-a-github-actions-workflow): minting installation tokens from workflow jobs.
+- [GitHub App installation token endpoint](https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app): one-hour token lifetime and repository restriction.
 - [GitHub deployment environments](https://docs.github.com/en/actions/concepts/workflows-and-actions/deployment-environments): protected jobs and environment-secret access.
 - [Cloudflare R2 consistency](https://developers.cloudflare.com/r2/reference/consistency/): strong object consistency and relaxed cached custom-domain behavior.
 - [Cloudflare R2 public buckets](https://developers.cloudflare.com/r2/buckets/public-buckets/): production custom domains and cache controls.
