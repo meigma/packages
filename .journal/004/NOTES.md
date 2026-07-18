@@ -22,3 +22,8 @@ Created isolated Worktrunk branch `feature/phase-3-unprivileged-workflows` from 
 The Phase 3 policy requires empty top-level permissions, no write scopes, GitHub-hosted runners, full-SHA action pins, disabled checkout credential persistence, pinned external container images, and no secrets, environments, or privileged pull-request triggers. The manual workflows intentionally perform no remote mutation and use the existing Phase 1/2 proofs rather than adding duplicate package logic to YAML.
 
 Local verification passed with `mise exec -- moon run root:check root:phase1-proof root:phase2-proof --summary minimal`: 13 tasks completed, including Go format/lint/build/test, strict docs, workflow and shell policy, clean package installation, deterministic rebuild/no-op behavior, and deletion-safe sync planning. Next: commit the isolated implementation, open a PR, and verify hosted checks on the exact head.
+
+## 2026-07-18 10:12 — Phase 3 review gate
+Committed the Phase 3 slice as `6efb1a6ed84c4b82bc01c029c6edd2a5746325ca` (`ci: add unprivileged workflow validation`), pushed `feature/phase-3-unprivileged-workflows`, and opened PR #8: https://github.com/meigma/packages/pull/8.
+
+Hosted CI run 29653434897 passed on the exact head and its logs confirm all 13 tasks ran, including `root:workflow-check`, `root:phase1-proof`, and `root:phase2-proof`. Kusari Inspector also passed. GitHub reports the PR clean and mergeable. Phase 3 is at the human review gate; no merge or privileged Phase 4 work has been performed.
