@@ -55,7 +55,7 @@ self-hosted runners.
 
 The following remain deferred beyond the first staging slice:
 
-- durable bucket-scoped R2 credentials replacing the short-lived rehearsal token;
+- automated renewal or an OIDC broker before the prefix-scoped staging credential expires in July 2027;
 - the final Cloudflare cache ruleset for immutable and mutable object classes;
 - GitHub Release discovery and production registry entries;
 - an explicit empty-prefix disaster-recovery rehearsal;
