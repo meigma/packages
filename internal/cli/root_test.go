@@ -98,3 +98,90 @@ func TestBuildLocalCommandPassesResolvedRequestAndPrintsResult(t *testing.T) {
 	}`, stdout.String())
 	assert.Empty(t, stderr.String())
 }
+
+func TestRebuildLocalCommandPassesResolvedRequestAndPrintsResult(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	expectedRequest := localrepo.RebuildRequest{
+		RegistryPath: "/fixtures/projects.yml",
+		Project:      "phase2-fixture",
+		ReleasesDir:  "/fixtures/releases",
+		Root:         "/tmp/candidate",
+		GNUPGHome:    "/tmp/gnupg",
+		SigningKey:   "0123456789ABCDEF",
+		BaseURL:      "http://phase2-repo:8080",
+	}
+	expectedResult := localrepo.RebuildResult{
+		Project:            "phase2-fixture",
+		Root:               "/tmp/candidate",
+		SelectedVersions:   []string{"v2.0.0", "v1.1.0"},
+		DesiredStateDigest: "abc123",
+		NoOp:               false,
+	}
+	root := NewRootCommand(Options{
+		Out: &stdout,
+		Err: &stderr,
+		RebuildLocal: func(_ context.Context, request localrepo.RebuildRequest) (localrepo.RebuildResult, error) {
+			assert.Equal(t, expectedRequest, request)
+
+			return expectedResult, nil
+		},
+	})
+	root.SetArgs([]string{
+		"rebuild-local",
+		"--registry", expectedRequest.RegistryPath,
+		"--project", expectedRequest.Project,
+		"--releases", expectedRequest.ReleasesDir,
+		"--root", expectedRequest.Root,
+		"--gnupg-home", expectedRequest.GNUPGHome,
+		"--signing-key", expectedRequest.SigningKey,
+		"--base-url", expectedRequest.BaseURL,
+	})
+
+	require.NoError(t, root.ExecuteContext(context.Background()))
+	assert.JSONEq(t, `{
+		"project":"phase2-fixture",
+		"root":"/tmp/candidate",
+		"selected_versions":["v2.0.0","v1.1.0"],
+		"desired_state_digest":"abc123",
+		"no_op":false
+	}`, stdout.String())
+	assert.Empty(t, stderr.String())
+}
+
+func TestPlanSyncCommandPrintsTheResolvedPlan(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	expected := localrepo.SyncPlan{
+		CandidateRoot: "/tmp/candidate",
+		RemoteRoot:    "/tmp/remote",
+		Actions: []localrepo.SyncAction{{
+			Stage: "delete",
+			Kind:  "delete",
+			Path:  "expired.rpm",
+		}},
+	}
+	root := NewRootCommand(Options{
+		Out: &stdout,
+		Err: &stderr,
+		PlanSync: func(candidate string, remote string) (localrepo.SyncPlan, error) {
+			assert.Equal(t, expected.CandidateRoot, candidate)
+			assert.Equal(t, expected.RemoteRoot, remote)
+
+			return expected, nil
+		},
+	})
+	root.SetArgs([]string{"plan-sync", "--root", expected.CandidateRoot, "--remote", expected.RemoteRoot})
+
+	require.NoError(t, root.ExecuteContext(context.Background()))
+	assert.JSONEq(t, `{
+		"candidate_root":"/tmp/candidate",
+		"remote_root":"/tmp/remote",
+		"actions":[{"stage":"delete","kind":"delete","path":"expired.rpm"}]
+	}`, stdout.String())
+	assert.Empty(t, stderr.String())
+}
