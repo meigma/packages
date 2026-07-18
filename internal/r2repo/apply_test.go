@@ -74,15 +74,34 @@ func TestRequestValidationRejectsUnsafeConfiguration(t *testing.T) {
 		mutate  func(*Request)
 		message string
 	}{
-		{name: "missing secret key", mutate: func(request *Request) { request.SecretAccessKey = "" }, message: "R2 secret key is required"},
-		{name: "absolute prefix", mutate: func(request *Request) { request.Prefix = "/_staging/" }, message: "prefix must be a clean relative path"},
-		{name: "traversing prefix", mutate: func(request *Request) { request.Prefix = "../_staging/" }, message: "prefix must be a clean relative path"},
-		{name: "prefix without slash", mutate: func(request *Request) { request.Prefix = "_staging" }, message: "prefix must be a clean relative path"},
-		{name: "insecure endpoint", mutate: func(request *Request) { request.Endpoint = "http://r2.example" }, message: "endpoint must use https"},
+		{
+			name:    "missing secret key",
+			mutate:  func(request *Request) { request.SecretAccessKey = "" },
+			message: "R2 secret key is required",
+		},
+		{
+			name:    "absolute prefix",
+			mutate:  func(request *Request) { request.Prefix = "/_staging/" },
+			message: "prefix must be a clean relative path",
+		},
+		{
+			name:    "traversing prefix",
+			mutate:  func(request *Request) { request.Prefix = "../_staging/" },
+			message: "prefix must be a clean relative path",
+		},
+		{
+			name:    "prefix without slash",
+			mutate:  func(request *Request) { request.Prefix = "_staging" },
+			message: "prefix must be a clean relative path",
+		},
+		{
+			name:    "insecure endpoint",
+			mutate:  func(request *Request) { request.Endpoint = "http://r2.example" },
+			message: "endpoint must use https",
+		},
 	}
 
 	for _, test := range tests {
-		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			request := validRequest(t.TempDir())

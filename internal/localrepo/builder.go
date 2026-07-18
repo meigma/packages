@@ -19,6 +19,9 @@ const (
 	publicFileMode = 0o644
 	batchFlag      = "--batch"
 	verifyFlag     = "--verify"
+	pinentryFlag   = "--pinentry-mode"
+	yesFlag        = "--yes"
+	loopbackMode   = "loopback"
 )
 
 // Request describes one local fixture-to-candidate build.
@@ -31,10 +34,14 @@ type Request struct {
 	ReleaseDir string
 	// Root is the new candidate-tree directory to create.
 	Root string
-	// GNUPGHome contains the throwaway signing key used by the local build.
+	// GNUPGHome contains the signing keyring used by the build.
 	GNUPGHome string
 	// SigningKey is the full fingerprint of the signing subkey.
 	SigningKey string
+	// SigningPassphrase unlocks the signing subkey through GPG standard input.
+	SigningPassphrase string
+	// SigningPassphraseFile is an optional mode-0600 GPG passphrase file.
+	SigningPassphraseFile string
 	// BaseURL is the public root URL rendered into install configuration.
 	BaseURL string
 }
@@ -132,6 +139,27 @@ func (request Request) validate() error {
 			return fmt.Errorf("%s is required", field)
 		}
 	}
+	if err := validatePassphraseFile(request.SigningPassphraseFile); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func validatePassphraseFile(path string) error {
+	if strings.TrimSpace(path) == "" {
+		return nil
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("inspect GPG passphrase file: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return errors.New("GPG passphrase file must be a regular file")
+	}
+	if info.Mode().Perm()&0o077 != 0 {
+		return errors.New("GPG passphrase file must not be accessible by group or others")
+	}
 
 	return nil
 }
@@ -222,15 +250,29 @@ func (instance builder) writeAndSignRelease(
 
 	environment := []string{"GNUPGHOME=" + request.GNUPGHome}
 	key := request.SigningKey + "!"
-	if _, err := instance.runner.run(
-		ctx, "", environment, "gpg", batchFlag, "--yes", "--local-user", key,
+	passphraseArguments, passphraseInput := request.gpgPassphrase()
+	detachArguments := []string{batchFlag, yesFlag, pinentryFlag, loopbackMode}
+	detachArguments = append(detachArguments, passphraseArguments...)
+	detachArguments = append(
+		detachArguments,
+		"--local-user", key,
 		"--armor", "--detach-sign", "--output", releasePath+".gpg", releasePath,
+	)
+	if _, err := instance.runner.runWithInput(
+		ctx, "", environment, passphraseInput, "gpg", detachArguments...,
 	); err != nil {
 		return err
 	}
-	if _, err := instance.runner.run(
-		ctx, "", environment, "gpg", batchFlag, "--yes", "--local-user", key,
+	passphraseArguments, passphraseInput = request.gpgPassphrase()
+	clearSignArguments := []string{batchFlag, yesFlag, pinentryFlag, loopbackMode}
+	clearSignArguments = append(clearSignArguments, passphraseArguments...)
+	clearSignArguments = append(
+		clearSignArguments,
+		"--local-user", key,
 		"--clearsign", "--output", filepath.Join(releaseDir, "InRelease"), releasePath,
+	)
+	if _, err := instance.runner.runWithInput(
+		ctx, "", environment, passphraseInput, "gpg", clearSignArguments...,
 	); err != nil {
 		return err
 	}
@@ -258,12 +300,20 @@ func (instance builder) buildRPM(
 	}
 
 	repomdPath := filepath.Join(rpmRoot, "repodata", "repomd.xml")
-	if _, err := instance.runner.run(
+	passphraseArguments, passphraseInput := request.gpgPassphrase()
+	signArguments := []string{batchFlag, yesFlag, pinentryFlag, loopbackMode}
+	signArguments = append(signArguments, passphraseArguments...)
+	signArguments = append(
+		signArguments,
+		"--local-user", request.SigningKey+"!",
+		"--armor", "--detach-sign", "--output", repomdPath+".asc", repomdPath,
+	)
+	if _, err := instance.runner.runWithInput(
 		ctx,
 		"",
 		[]string{"GNUPGHOME=" + request.GNUPGHome},
-		"gpg", batchFlag, "--yes", "--local-user", request.SigningKey+"!",
-		"--armor", "--detach-sign", "--output", repomdPath+".asc", repomdPath,
+		passphraseInput,
+		"gpg", signArguments...,
 	); err != nil {
 		return err
 	}
@@ -282,6 +332,14 @@ func (instance builder) buildRPM(
 	}
 
 	return nil
+}
+
+func (request Request) gpgPassphrase() ([]string, io.Reader) {
+	if strings.TrimSpace(request.SigningPassphraseFile) != "" {
+		return []string{"--passphrase-file", request.SigningPassphraseFile}, nil
+	}
+
+	return []string{"--passphrase-fd", "0"}, strings.NewReader(request.SigningPassphrase + "\n")
 }
 
 func (instance builder) exportAndVerify(ctx context.Context, request Request) error {

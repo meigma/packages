@@ -1,11 +1,12 @@
 # meigma/packages
 
 `meigma/packages` builds and publishes the signed APT and RPM repositories used
-by Meigma projects. The current secrets-free implementation builds and verifies
-signed local candidates from fixture release sets, applies deterministic
-retention, proves rebuild/no-op behavior, and emits deletion-safe sync plans.
-GitHub Release discovery, R2 transport, and production signing remain later
-phases.
+by Meigma projects. It builds verified candidates from fixture release sets,
+applies deterministic retention, proves rebuild/no-op behavior, and executes
+deletion-safe sync plans. Phase 4 adds an opt-in protected path that signs with
+the CI signing subkey, publishes only under the R2 `_staging/` prefix, verifies
+the remote result, and installs through the public hostname. GitHub Release
+discovery and production publication remain later phases.
 
 The `meigma-packages` binary is an implementation detail of this repository. It
 is built and run from source in local development and GitHub Actions, and is not
@@ -39,8 +40,8 @@ moon run root:check
 The aggregate `root:check` task also builds the local documentation. CI runs
 the affected equivalent with `moon ci --summary minimal`. Workflow validation
 uses pinned `actionlint` and ShellCheck versions plus a repository policy that
-keeps every Phase 3 workflow read-only, GitHub-hosted, full-SHA pinned, and free
-of secrets or deployment environments.
+keeps routine jobs read-only, GitHub-hosted, and full-SHA pinned. Secrets and a
+deployment environment are allowed only in the dedicated manual staging job.
 
 The CLI scaffold can be exercised directly:
 
@@ -84,17 +85,18 @@ The entrypoint under `cmd/meigma-packages` remains thin. Cobra/Viper command
 construction lives under `internal/cli`, with `MEIGMA_PACKAGES_*` reserved as
 the environment-variable prefix for future configuration.
 
-## Unprivileged workflow validation
+## Workflow validation and staging
 
 The manual `Publish validation` and `Rebuild validation` workflows exercise the
 same fixture-backed proofs on GitHub-hosted runners. They use
 `meigma-packages validate-request` to reject unknown projects, unsafe project
 names, and invalid stable release tags before invoking the local proof.
 
-These workflows are intentionally not publishers. They have no secrets, write
-permissions, deployment environments, R2 connection, production key, or remote
-mutation step. See the [operations boundary](docs/docs/operations.md) before
-extending either workflow.
+Both validation jobs are unprivileged. `Publish validation` can additionally
+run the protected staging job when manually dispatched with
+`apply_staging=true`; it publishes and verifies only `_staging/` and has no
+production selection. See the [operations boundary](docs/docs/operations.md)
+before extending the privileged boundary.
 
 ## Documentation
 

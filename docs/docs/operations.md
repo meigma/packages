@@ -1,6 +1,6 @@
 ---
 title: Operations boundary
-description: What the Phase 3 workflows prove and what remains deliberately disabled.
+description: What the read-only workflows and protected Phase 4 staging path can do.
 ---
 
 # Operations boundary
@@ -24,9 +24,15 @@ proof.
 `Rebuild validation` is manually dispatched with a fixture project. It
 validates the project and runs the Phase 2 deterministic rebuild proof.
 
-The validation workflows are intentionally named for the path they exercise,
-not for an external side effect. A successful run changes no package repository
-state.
+Without the explicit `apply_staging` input, the validation workflows change no
+package repository state.
+
+`Publish validation` can additionally run a manually selected, protected
+`staging` job after its read-only validation succeeds. That job is the only
+checked-in privileged boundary: it imports the signing-only subkey, builds the
+same fixture candidate, applies the ordered plan under `_staging/`, rehydrates
+and verifies R2, repeats the publish as a no-op, and installs through the public
+hostname from clean Debian, Ubuntu, and Fedora containers.
 
 ## Enforced safety boundary
 
@@ -36,24 +42,25 @@ All checked-in workflows currently require:
 - GitHub-hosted runners;
 - full commit SHA pins for actions;
 - checkout credential persistence disabled;
-- no secrets or deployment environments;
+- secrets and deployment environments only inside the dedicated manual staging job;
 - no privileged pull-request triggers.
 
-The policy is executable through `moon run root:workflow-check`. Phase 4 must
-change that policy deliberately and review the privileged job boundary rather
-than quietly adding credentials to an existing unprivileged job.
+The policy is executable through `moon run root:workflow-check`. It permits
+secrets only in the manual staging workflow, requires that job to depend on
+read-only validation, and continues to reject pull-request-derived privileged
+triggers, production configuration, write permissions, unpinned actions, and
+self-hosted runners.
 
-## Deferred until staging
+## Deferred after the first staging slice
 
-The following are not configured in Phase 3:
+The following remain deferred beyond the first staging slice:
 
-- GitHub Release discovery and download;
-- Cloudflare R2 credentials or object transport;
-- production or staging signing material;
-- protected deployment environments;
-- remote apply, deletion, or public-host verification;
+- durable bucket-scoped R2 credentials replacing the short-lived rehearsal token;
+- the final Cloudflare cache ruleset for immutable and mutable object classes;
+- GitHub Release discovery and production registry entries;
+- an explicit empty-prefix disaster-recovery rehearsal;
+- production remote apply and deletion;
 - consumer repository dispatch.
 
-Before staging rehearsal, provision the external resources, introduce a
-separate privileged mutation job, preserve read-only validation before that
-job, and keep production selection behind explicit environment protection.
+Production selection is not present in Phase 4. It remains behind a later,
+separately reviewed protected-environment boundary.

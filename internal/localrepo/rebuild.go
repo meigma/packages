@@ -40,10 +40,14 @@ type RebuildRequest struct {
 	ReleasesDir string
 	// Root is the candidate tree to create or verify as a no-op.
 	Root string
-	// GNUPGHome contains the throwaway signing key used by a changed rebuild.
+	// GNUPGHome contains the signing keyring used by a changed rebuild.
 	GNUPGHome string
 	// SigningKey is the full fingerprint of the signing subkey.
 	SigningKey string
+	// SigningPassphrase unlocks the signing subkey through GPG standard input.
+	SigningPassphrase string
+	// SigningPassphraseFile is an optional mode-0600 GPG passphrase file.
+	SigningPassphraseFile string
 	// BaseURL is the public root URL rendered into install configuration.
 	BaseURL string
 }
@@ -144,13 +148,15 @@ func Rebuild(ctx context.Context, request RebuildRequest) (RebuildResult, error)
 		assets = append(assets, release.asset)
 	}
 	buildRequest := Request{
-		RegistryPath: request.RegistryPath,
-		Project:      request.Project,
-		ReleaseDir:   request.ReleasesDir,
-		Root:         request.Root,
-		GNUPGHome:    request.GNUPGHome,
-		SigningKey:   request.SigningKey,
-		BaseURL:      request.BaseURL,
+		RegistryPath:          request.RegistryPath,
+		Project:               request.Project,
+		ReleaseDir:            request.ReleasesDir,
+		Root:                  request.Root,
+		GNUPGHome:             request.GNUPGHome,
+		SigningKey:            request.SigningKey,
+		SigningPassphrase:     request.SigningPassphrase,
+		SigningPassphraseFile: request.SigningPassphraseFile,
+		BaseURL:               request.BaseURL,
 	}
 	if _, err := instance.buildCandidate(ctx, buildRequest, project, assets); err != nil {
 		return RebuildResult{}, err
@@ -176,6 +182,9 @@ func (request RebuildRequest) validate() error {
 		if strings.TrimSpace(value) == "" {
 			return fmt.Errorf("%s is required", field)
 		}
+	}
+	if err := validatePassphraseFile(request.SigningPassphraseFile); err != nil {
+		return err
 	}
 
 	return nil

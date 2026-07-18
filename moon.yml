@@ -85,6 +85,17 @@ tasks:
     options:
       cache: false
 
+  phase4-staging:
+    command: 'scripts/phase4-staging.sh'
+    inputs:
+      - '@group(goSources)'
+      - 'scripts/phase4-staging.sh'
+      - 'testdata/phase2/projects.yml'
+      - 'spikes/phase0/**/*'
+    options:
+      cache: false
+      runInCI: false
+
   workflow-check:
     command: 'scripts/phase3-ci.sh'
     inputs:

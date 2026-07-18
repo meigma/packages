@@ -93,15 +93,15 @@ func applyWithClient(ctx context.Context, client s3Client, request Request) (Res
 		return Result{}, fmt.Errorf("create remote snapshot: %w", err)
 	}
 	defer os.RemoveAll(remoteRoot)
-	if err := hydrate(ctx, client, request, remoteRoot); err != nil {
-		return Result{}, err
+	if hydrateErr := hydrate(ctx, client, request, remoteRoot); hydrateErr != nil {
+		return Result{}, hydrateErr
 	}
 	plan, err := localrepo.PlanSync(request.Root, remoteRoot)
 	if err != nil {
 		return Result{}, fmt.Errorf("plan R2 sync: %w", err)
 	}
-	if err := applyPlan(ctx, client, request, plan); err != nil {
-		return Result{}, err
+	if applyErr := applyPlan(ctx, client, request, plan); applyErr != nil {
+		return Result{}, applyErr
 	}
 
 	verifiedRoot, err := os.MkdirTemp("", "meigma-packages-r2-after-")
@@ -109,8 +109,8 @@ func applyWithClient(ctx context.Context, client s3Client, request Request) (Res
 		return Result{}, fmt.Errorf("create verification snapshot: %w", err)
 	}
 	defer os.RemoveAll(verifiedRoot)
-	if err := hydrate(ctx, client, request, verifiedRoot); err != nil {
-		return Result{}, fmt.Errorf("verify R2 prefix: %w", err)
+	if hydrateErr := hydrate(ctx, client, request, verifiedRoot); hydrateErr != nil {
+		return Result{}, fmt.Errorf("verify R2 prefix: %w", hydrateErr)
 	}
 	verification, err := localrepo.PlanSync(request.Root, verifiedRoot)
 	if err != nil {
@@ -232,10 +232,10 @@ func downloadObject(
 	}
 	defer output.Body.Close()
 	destination := filepath.Join(root, filepath.FromSlash(relative))
-	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
-		return fmt.Errorf("prepare R2 object path %s: %w", relative, err)
+	if mkdirErr := os.MkdirAll(filepath.Dir(destination), 0o700); mkdirErr != nil {
+		return fmt.Errorf("prepare R2 object path %s: %w", relative, mkdirErr)
 	}
-	file, err := os.OpenFile(destination, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	file, err := os.OpenFile(destination, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("create R2 object snapshot %s: %w", relative, err)
 	}
@@ -263,34 +263,49 @@ func applyPlan(ctx context.Context, client s3Client, request Request, plan local
 			}
 			continue
 		}
-		filePath := filepath.Join(request.Root, filepath.FromSlash(action.Path))
-		file, err := os.Open(filePath)
-		if err != nil {
-			return fmt.Errorf("open candidate object %s: %w", action.Path, err)
+		if err := putObject(ctx, client, request, key, action.Path); err != nil {
+			return err
 		}
-		digest, err := fileDigest(file)
-		if err != nil {
-			file.Close()
-			return fmt.Errorf("digest candidate object %s: %w", action.Path, err)
+	}
+
+	return nil
+}
+
+func putObject(
+	ctx context.Context,
+	client s3Client,
+	request Request,
+	key string,
+	relative string,
+) (returnErr error) {
+	filePath := filepath.Join(request.Root, filepath.FromSlash(relative))
+	file, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("open candidate object %s: %w", relative, err)
+	}
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			returnErr = errors.Join(
+				returnErr,
+				fmt.Errorf("close candidate object %s: %w", relative, closeErr),
+			)
 		}
-		if _, err := file.Seek(0, io.SeekStart); err != nil {
-			file.Close()
-			return fmt.Errorf("rewind candidate object %s: %w", action.Path, err)
-		}
-		_, putErr := client.PutObject(ctx, &s3.PutObjectInput{
-			Bucket:       aws.String(request.Bucket),
-			Key:          aws.String(key),
-			Body:         file,
-			CacheControl: aws.String("no-store"),
-			Metadata:     map[string]string{"sha256": digest},
-		})
-		closeErr := file.Close()
-		if putErr != nil {
-			return fmt.Errorf("upload R2 object %s: %w", action.Path, putErr)
-		}
-		if closeErr != nil {
-			return fmt.Errorf("close candidate object %s: %w", action.Path, closeErr)
-		}
+	}()
+	digest, err := fileDigest(file)
+	if err != nil {
+		return fmt.Errorf("digest candidate object %s: %w", relative, err)
+	}
+	if _, seekErr := file.Seek(0, io.SeekStart); seekErr != nil {
+		return fmt.Errorf("rewind candidate object %s: %w", relative, seekErr)
+	}
+	if _, putErr := client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:       aws.String(request.Bucket),
+		Key:          aws.String(key),
+		Body:         file,
+		CacheControl: aws.String("no-store"),
+		Metadata:     map[string]string{"sha256": digest},
+	}); putErr != nil {
+		return fmt.Errorf("upload R2 object %s: %w", relative, putErr)
 	}
 
 	return nil
