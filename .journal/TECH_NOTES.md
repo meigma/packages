@@ -10,8 +10,15 @@
   Apache-2.0/MIT dual licensing from PR #1. PR #6 added the secrets-free
   `build-local` vertical slice and `moon run root:phase1-proof`. PR #7 added
   deterministic fixture-set `rebuild-local`, `plan-sync`, logical manifests,
-  and `moon run root:phase2-proof`; Phase 3 CI and unprivileged workflow
-  integration is the next incomplete phase.
+  and `moon run root:phase2-proof`. PR #8 added `validate-request`, manual
+  fixture-backed publish/rebuild validation workflows, pinned actionlint and
+  ShellCheck, executable workflow/image policy, and the initial operations
+  boundary; Phase 4 staging provisioning and rehearsal is next.
+- Phase 3 workflows are deliberately manual, read-only, GitHub-hosted, and
+  disconnected from secrets, deployment environments, R2, and remote mutation.
+  Phase 4 must introduce a separate privileged mutation job and deliberately
+  revise the policy boundary rather than adding credentials to existing
+  validation jobs.
 - Phase 2 rebuild equivalence is the logical manifest digest, not byte equality
   of timestamp-bearing repository metadata or OpenPGP signatures. An unchanged
   rebuild verifies retained package digests and repository signatures before
@@ -36,4 +43,5 @@
   short-lived tokens restricted to the `packages` repository.
 - R2/domain/cache configuration, signing material, protected environments, and
   GitHub App registration are Josh-owned external actions deferred until the
-  secrets-free phases are green.
+  secrets-free phases are green. They are now the prerequisite owner actions
+  for Phase 4 staging rehearsal.
