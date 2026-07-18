@@ -36,3 +36,10 @@ Phase 0 assessment: formats and Ed25519 pass; APT direct-static publication pass
 
 ## 2026-07-17 22:55 — Transition-signature escape hatch rejected
 Before pausing, tested whether an armored `repomd.xml.asc` containing both old and new detached signatures could bridge the activation. DNF5 accepted the old `repomd.xml` when the old signature was the first armor block, but after switching to the new XML it rejected the first bad signature and did not continue to the matching second signature. Reversing the order would only reverse which snapshot works. Commit `1b39202` records this final probe and updated evidence. The RPM owner decision is still required.
+
+## 2026-07-17 23:17 — Phase 0 landed; Phase 1 local slice passed
+Josh approved the bounded fail-closed RPM policy for v1. Recorded the operational constraints in the Phase 0 evidence, addressed Kusari's non-root container finding, and squash-merged PR #5 after CI and Kusari passed on exact head `952241f`. `main` is now `23f23dd`; the Phase 0 branch/worktree and remote branch were cleaned up.
+
+Created `feature/phase-1-local-vertical-slice` from that main tip. Commits `eba7093` and `58fa0f9` add the durable `meigma-packages build-local` command, a minimal one-entry fixture registry, Go orchestration for APT/RPM generation and Ed25519 signing/verification, behavior-focused Testify tests, and `moon run root:phase1-proof` as the one-command developer gate. External package tools remain narrow process boundaries; no GitHub API, R2, or production key is involved.
+
+The Phase 1 proof generated fixture release assets, cross-compiled the CLI for the Docker architecture, produced a fresh signed candidate tree, verified `InRelease`, `Release.gpg`, and `repomd.xml.asc` offline, then installed and executed the package from a clean Debian 13 client. `root:phase1-proof` and `root:check` both passed. Next: push the branch, open the independently reviewable Phase 1 PR, confirm hosted CI/security on its exact head, and merge if green.
