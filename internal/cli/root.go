@@ -1,13 +1,19 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	"github.com/meigma/packages/internal/localrepo"
 )
+
+// LocalBuildFunc builds one verified local candidate tree.
+type LocalBuildFunc func(context.Context, localrepo.Request) (localrepo.Result, error)
 
 // BuildInfo describes build metadata printed by --version.
 type BuildInfo struct {
@@ -31,6 +37,8 @@ type Options struct {
 	Build BuildInfo
 	// Viper is the configuration instance used by the command tree.
 	Viper *viper.Viper
+	// BuildLocal supplies the fixture-to-candidate implementation.
+	BuildLocal LocalBuildFunc
 }
 
 // NewRootCommand creates the meigma-packages Cobra command tree.
@@ -46,6 +54,9 @@ func NewRootCommand(options Options) *cobra.Command {
 	}
 	if options.Viper == nil {
 		options.Viper = viper.New()
+	}
+	if options.BuildLocal == nil {
+		options.BuildLocal = localrepo.Build
 	}
 	options.Build = options.Build.withDefaults()
 
@@ -73,6 +84,7 @@ func NewRootCommand(options Options) *cobra.Command {
 	root.SetIn(options.In)
 	root.SetOut(options.Out)
 	root.SetErr(options.Err)
+	root.AddCommand(newBuildLocalCommand(options))
 
 	return root
 }

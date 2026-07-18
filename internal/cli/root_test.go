@@ -3,8 +3,12 @@ package cli
 import (
 	"bytes"
 	"context"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/meigma/packages/internal/localrepo"
 )
 
 func TestVersionFlagPrintsBuildMetadata(t *testing.T) {
@@ -23,15 +27,9 @@ func TestVersionFlagPrintsBuildMetadata(t *testing.T) {
 	})
 	root.SetArgs([]string{"--version"})
 
-	if err := root.ExecuteContext(context.Background()); err != nil {
-		t.Fatalf("ExecuteContext returned an error: %v", err)
-	}
-	if got, want := stdout.String(), "meigma-packages 0.1.0 (abc1234) built 2026-05-08T10:00:00Z\n"; got != want {
-		t.Fatalf("stdout = %q, want %q", got, want)
-	}
-	if got := stderr.String(); got != "" {
-		t.Fatalf("stderr = %q, want empty", got)
-	}
+	require.NoError(t, root.ExecuteContext(context.Background()))
+	assert.Equal(t, "meigma-packages 0.1.0 (abc1234) built 2026-05-08T10:00:00Z\n", stdout.String())
+	assert.Empty(t, stderr.String())
 }
 
 func TestRootCommandPrintsHelp(t *testing.T) {
@@ -44,13 +42,59 @@ func TestRootCommandPrintsHelp(t *testing.T) {
 		Err: &stderr,
 	})
 
-	if err := root.ExecuteContext(context.Background()); err != nil {
-		t.Fatalf("ExecuteContext returned an error: %v", err)
+	require.NoError(t, root.ExecuteContext(context.Background()))
+	assert.Contains(t, stdout.String(), "Build and publish Meigma APT and RPM repositories")
+	assert.Empty(t, stderr.String())
+}
+
+func TestBuildLocalCommandPassesResolvedRequestAndPrintsResult(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	expectedRequest := localrepo.Request{
+		RegistryPath: "/fixtures/projects.yml",
+		Project:      "phase1-fixture",
+		ReleaseDir:   "/fixtures/release",
+		Root:         "/tmp/candidate",
+		GNUPGHome:    "/tmp/gnupg",
+		SigningKey:   "0123456789ABCDEF",
+		BaseURL:      "http://phase1-repo:8080",
 	}
-	if got := stdout.String(); !strings.Contains(got, "Build and publish Meigma APT and RPM repositories") {
-		t.Fatalf("stdout does not contain command summary: %q", got)
+	expectedResult := localrepo.Result{
+		Project:         "phase1-fixture",
+		PackageName:     "meigma-phase0",
+		Root:            "/tmp/candidate",
+		DEBArchitecture: "arm64",
+		SigningKey:      "0123456789ABCDEF",
 	}
-	if got := stderr.String(); got != "" {
-		t.Fatalf("stderr = %q, want empty", got)
-	}
+	root := NewRootCommand(Options{
+		Out: &stdout,
+		Err: &stderr,
+		BuildLocal: func(_ context.Context, request localrepo.Request) (localrepo.Result, error) {
+			assert.Equal(t, expectedRequest, request)
+
+			return expectedResult, nil
+		},
+	})
+	root.SetArgs([]string{
+		"build-local",
+		"--registry", expectedRequest.RegistryPath,
+		"--project", expectedRequest.Project,
+		"--release", expectedRequest.ReleaseDir,
+		"--root", expectedRequest.Root,
+		"--gnupg-home", expectedRequest.GNUPGHome,
+		"--signing-key", expectedRequest.SigningKey,
+		"--base-url", expectedRequest.BaseURL,
+	})
+
+	require.NoError(t, root.ExecuteContext(context.Background()))
+	assert.JSONEq(t, `{
+		"project":"phase1-fixture",
+		"package_name":"meigma-phase0",
+		"root":"/tmp/candidate",
+		"deb_architecture":"arm64",
+		"signing_key":"0123456789ABCDEF"
+	}`, stdout.String())
+	assert.Empty(t, stderr.String())
 }
