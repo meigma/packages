@@ -10,11 +10,11 @@ description: Build and operate Meigma APT and RPM repositories.
 publishing signed APT and RPM repositories from approved Meigma GitHub
 Releases.
 
-The current codebase builds and verifies signed local candidates, retains stable
+The current codebase builds and verifies signed candidates, retains stable
 versions deterministically, verifies same-input no-ops, rebuilds from an empty
-root, and plans ordered filesystem changes with deletions last. The canonical
-registry can also discover and verify published GitHub Release packages.
-Production remote publication remains deliberately deferred.
+root, and plans ordered remote changes with deletions last. The canonical
+registry discovers and verifies GitHub Release packages. Protected staging and
+production jobs publish the initial `incus-gh-runner` `v1.0.0` repository.
 
 ## Developer quick start
 
@@ -36,10 +36,13 @@ run it from this repository.
   rebuild equivalence, and deletion-safe sync planning.
 - `root:phase5-source-proof` verifies the real `incus-gh-runner` `v1.0.0`
   release and performs clean DEB and RPM installs without publishing.
+- `root:phase5-publish` is the secret-bearing protected entrypoint used to
+  publish, verify, repeat as a no-op, and install from staging or production.
 - `root:workflow-check` validates workflow syntax, embedded and standalone
   shell, full-SHA action pins, read-only permissions, and the Phase 3
   no-secrets boundary.
 
-The manually dispatched publish and rebuild validation workflows run these
-local proofs on GitHub-hosted runners. They do not publish anything. See
-[Operations boundary](operations.md) for the exact handoff into staging work.
+The manually dispatched publish workflow validates without secrets, then can
+hand off to protected staging and production jobs only through explicit inputs
+and exact confirmation phrases. See [Operations boundary](operations.md) for
+the enforced scope and recovery behavior.

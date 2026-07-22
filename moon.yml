@@ -108,6 +108,17 @@ tasks:
       cache: false
       runInCI: false
 
+  phase5-publish:
+    command: 'scripts/phase5-publish.sh'
+    inputs:
+      - '@group(goSources)'
+      - 'projects.yml'
+      - 'scripts/phase5-publish.sh'
+      - 'spikes/phase0/**/*'
+    options:
+      cache: false
+      runInCI: false
+
   workflow-check:
     command: 'scripts/phase3-ci.sh'
     inputs:

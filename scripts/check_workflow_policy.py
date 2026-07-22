@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Enforce the unprivileged and staging workflow trust boundaries."""
+"""Enforce unprivileged, staging, and production workflow trust boundaries."""
 
 from pathlib import Path
 import re
@@ -40,13 +40,33 @@ def validate_workflow(path: Path) -> list[str]:
             ):
                 violations.append("secrets and environments must be confined to the staging job")
         if not re.search(r"(?m)^\s+name:\s*staging\s*$", text):
-            violations.append("Phase 4 privileged jobs must use the staging environment")
+            violations.append("privileged publish workflows must use the staging environment")
         if not re.search(r"(?m)^\s+needs:\s*validate\s*$", text):
-            violations.append("Phase 4 privileged jobs must depend on read-only validation")
+            violations.append("the staging job must depend on read-only validation")
         if re.search(r"(?m)^\s+(?:pull_request|pull_request_target|workflow_run):", text):
             violations.append("privileged workflows must not use pull-request-derived triggers")
-        if "production" in text.lower():
-            violations.append("production workflow configuration is forbidden during Phase 4")
+        production_marker = "\n  production:\n"
+        production_offset = text.find(production_marker)
+        if production_offset != -1:
+            if production_offset < staging_offset:
+                violations.append("the production job must follow the staging job")
+            if not re.search(r"(?m)^\s+name:\s*production\s*$", text):
+                violations.append("the production job must use the production environment")
+            production_block = text[production_offset:]
+            if not re.search(
+                r"(?m)^\s+group:\s*meigma-packages-r2-production\s*$",
+                production_block,
+            ):
+                violations.append("production publication requires serialized concurrency")
+            if "publish incus-gh-runner v1.0.0 to production" not in text:
+                violations.append("production publication requires an exact confirmation phrase")
+            if "R2_PREFIX: ''" not in production_block:
+                violations.append("production publication requires an explicit empty R2 prefix")
+            if not re.search(
+                r"(?ms)^\s+needs:\s*\n\s+-\s+validate\s*\n\s+-\s+staging\s*$",
+                production_block,
+            ):
+                violations.append("production publication must depend on validation and staging")
     if re.search(r"(?m)^\s+[a-z-]+:\s*write\s*$", text):
         violations.append("write permissions are forbidden before Phase 4")
     if "self-hosted" in text:
