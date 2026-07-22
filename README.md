@@ -5,8 +5,9 @@ by Meigma projects. It builds verified candidates from fixture release sets,
 applies deterministic retention, proves rebuild/no-op behavior, and executes
 deletion-safe sync plans. Phase 4 adds an opt-in protected path that signs with
 the CI signing subkey, publishes only under the R2 `_staging/` prefix, verifies
-the remote result, and installs through the public hostname. GitHub Release
-discovery and production publication remain later phases.
+the remote result, and installs through the public hostname. Phase 5 adds the
+canonical project registry and verified GitHub Release discovery. Production
+publication remains a later phase.
 
 The `meigma-packages` binary is an implementation detail of this repository. It
 is built and run from source in local development and GitHub Actions, and is not
@@ -78,8 +79,24 @@ moon run root:phase2-proof
 The proof builds three fixture releases, retains the newest two, verifies that
 the same input is a no-op, rebuilds the same logical tree from an empty root,
 and confirms that every planned deletion follows content and metadata
-activation. It remains local and secrets-free; GitHub Release discovery, R2
-transport, and production signing material are later phases.
+activation. This fixture proof remains local and secrets-free; the separate
+Phase 5 proof covers GitHub Release discovery. Production R2 transport and
+signing material remain later phases.
+
+## Real release source proof
+
+The opt-in Phase 5 proof downloads `incus-gh-runner` `v1.0.0` from its public
+GitHub Release, verifies GitHub's asset digests and the pinned release-workflow
+attestations, rebuilds the signed multi-architecture repositories, and performs
+clean DEB and RPM installs on the current Docker architecture:
+
+```sh
+moon run root:phase5-source-proof
+```
+
+The source contract is checked into [`projects.yml`](projects.yml). The proof
+uses GitHub and Docker but no publishing or production credentials. It does not
+write to R2.
 
 The entrypoint under `cmd/meigma-packages` remains thin. Cobra/Viper command
 construction lives under `internal/cli`, with `MEIGMA_PACKAGES_*` reserved as

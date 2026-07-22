@@ -20,6 +20,7 @@ fileGroups:
     - 'internal/**/*.go'
     - 'go.mod'
     - 'go.sum'
+    - 'projects.yml'
     # Tool/version pins. Under the `system` toolchain moon does not hash the Go
     # binary's version, so the mise pins are inputs here too — bumping Go (or any
     # tool) in mise must invalidate the cacheable build task.
@@ -91,6 +92,17 @@ tasks:
       - '@group(goSources)'
       - 'scripts/phase4-staging.sh'
       - 'testdata/phase2/projects.yml'
+      - 'spikes/phase0/**/*'
+    options:
+      cache: false
+      runInCI: false
+
+  phase5-source-proof:
+    command: 'scripts/phase5-source.sh'
+    inputs:
+      - '@group(goSources)'
+      - 'projects.yml'
+      - 'scripts/phase5-source.sh'
       - 'spikes/phase0/**/*'
     options:
       cache: false

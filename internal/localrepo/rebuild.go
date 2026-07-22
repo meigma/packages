@@ -102,6 +102,8 @@ type PackageRecord struct {
 	Version string `json:"version"`
 	// Architecture is the architecture read from package metadata.
 	Architecture string `json:"architecture"`
+	// RepositoryArchitecture is the architecture exposed by repository metadata.
+	RepositoryArchitecture string `json:"repository_architecture,omitempty"`
 	// SHA256 is the verified package digest.
 	SHA256 string `json:"sha256"`
 }
@@ -110,7 +112,7 @@ type fixtureRelease struct {
 	tag     string
 	version [3]int
 	dir     string
-	asset   candidateAsset
+	assets  []candidateAsset
 	records []PackageRecord
 }
 
@@ -143,9 +145,9 @@ func Rebuild(ctx context.Context, request RebuildRequest) (RebuildResult, error)
 		return RebuildResult{}, fmt.Errorf("inspect candidate root: %w", statErr)
 	}
 
-	assets := make([]candidateAsset, 0, len(releases))
+	assets := make([]candidateAsset, 0, len(releases)*packageFormatsPerRelease)
 	for _, release := range releases {
-		assets = append(assets, release.asset)
+		assets = append(assets, release.assets...)
 	}
 	buildRequest := Request{
 		RegistryPath:          request.RegistryPath,
@@ -268,7 +270,7 @@ func (instance builder) validateRelease(
 	project projectConfig,
 	release *fixtureRelease,
 ) error {
-	checksumPath, err := resolveOne(release.dir, project.Assets.Checksums)
+	checksumPath, err := resolveOne(release.dir, ExpandAssetPattern(project.Assets.Checksums, release.tag))
 	if err != nil {
 		return err
 	}
@@ -276,15 +278,149 @@ func (instance builder) validateRelease(
 	if err != nil {
 		return err
 	}
-	debPath, err := resolveOne(release.dir, project.Assets.DEB)
+	if len(project.Architectures) == 0 {
+		return instance.validateLegacyRelease(ctx, project, release, checksums)
+	}
+
+	debPaths, err := resolveMany(
+		release.dir,
+		ExpandAssetPattern(project.Assets.DEB, release.tag),
+		len(project.Architectures),
+	)
 	if err != nil {
 		return err
 	}
-	rpmPath, err := resolveOne(release.dir, project.Assets.RPM)
+	rpmPaths, err := resolveMany(
+		release.dir,
+		ExpandAssetPattern(project.Assets.RPM, release.tag),
+		len(project.Architectures),
+	)
 	if err != nil {
 		return err
 	}
 
+	debRecords, err := instance.inspectArchitectureRecords(
+		ctx,
+		project,
+		release,
+		checksums,
+		formatDEB,
+		debPaths,
+	)
+	if err != nil {
+		return err
+	}
+	rpmRecords, err := instance.inspectArchitectureRecords(
+		ctx,
+		project,
+		release,
+		checksums,
+		formatRPM,
+		rpmPaths,
+	)
+	if err != nil {
+		return err
+	}
+
+	return assembleArchitectureAssets(release, project, debRecords, rpmRecords)
+}
+
+func (instance builder) inspectArchitectureRecords(
+	ctx context.Context,
+	project projectConfig,
+	release *fixtureRelease,
+	checksums map[string]string,
+	format string,
+	paths []string,
+) (map[string]PackageRecord, error) {
+	records := make(map[string]PackageRecord, len(paths))
+	for _, packagePath := range paths {
+		var record PackageRecord
+		var err error
+		switch format {
+		case formatDEB:
+			record, err = instance.inspectDEB(
+				ctx,
+				release.tag,
+				packagePath,
+				project.PackageName,
+				checksums,
+			)
+		case formatRPM:
+			record, err = instance.inspectRPM(
+				ctx,
+				release.tag,
+				packagePath,
+				project.PackageName,
+				checksums,
+			)
+		default:
+			return nil, fmt.Errorf("unsupported package format %q", format)
+		}
+		if err != nil {
+			return nil, err
+		}
+		architecture, err := repositoryArchitecture(project, format, record.Architecture)
+		if err != nil {
+			return nil, err
+		}
+		if _, exists := records[architecture]; exists {
+			return nil, fmt.Errorf(
+				"multiple %s assets map to repository architecture %s",
+				strings.ToUpper(format),
+				architecture,
+			)
+		}
+		record.RepositoryArchitecture = architecture
+		records[architecture] = record
+	}
+
+	return records, nil
+}
+
+func assembleArchitectureAssets(
+	release *fixtureRelease,
+	project projectConfig,
+	debRecords map[string]PackageRecord,
+	rpmRecords map[string]PackageRecord,
+) error {
+	architectures := make([]string, 0, len(project.Architectures))
+	for architecture := range project.Architectures {
+		architectures = append(architectures, architecture)
+	}
+	sort.Strings(architectures)
+	for _, architecture := range architectures {
+		debRecord, debOK := debRecords[architecture]
+		rpmRecord, rpmOK := rpmRecords[architecture]
+		if !debOK || !rpmOK {
+			return fmt.Errorf("release is missing the DEB or RPM for repository architecture %s", architecture)
+		}
+		release.assets = append(release.assets, candidateAsset{
+			debPath:                   filepath.Join(release.dir, debRecord.File),
+			debRepositoryArchitecture: architecture,
+			rpmPath:                   filepath.Join(release.dir, rpmRecord.File),
+			rpmArchitecture:           rpmRecord.Architecture,
+		})
+		release.records = append(release.records, debRecord, rpmRecord)
+	}
+
+	return nil
+}
+
+func (instance builder) validateLegacyRelease(
+	ctx context.Context,
+	project projectConfig,
+	release *fixtureRelease,
+	checksums map[string]string,
+) error {
+	debPath, err := resolveOne(release.dir, ExpandAssetPattern(project.Assets.DEB, release.tag))
+	if err != nil {
+		return err
+	}
+	rpmPath, err := resolveOne(release.dir, ExpandAssetPattern(project.Assets.RPM, release.tag))
+	if err != nil {
+		return err
+	}
 	debRecord, err := instance.inspectDEB(ctx, release.tag, debPath, project.PackageName, checksums)
 	if err != nil {
 		return err
@@ -293,33 +429,63 @@ func (instance builder) validateRelease(
 	if err != nil {
 		return err
 	}
-	release.asset = candidateAsset{
+	release.assets = []candidateAsset{{
 		debPath:         debPath,
 		rpmPath:         rpmPath,
 		rpmArchitecture: rpmRecord.Architecture,
-	}
+	}}
 	release.records = []PackageRecord{debRecord, rpmRecord}
 
 	return nil
 }
 
+func repositoryArchitecture(project projectConfig, format string, packageArchitecture string) (string, error) {
+	for architecture, mapping := range project.Architectures {
+		var expected string
+		switch format {
+		case formatDEB:
+			expected = mapping.DEB
+		case formatRPM:
+			expected = mapping.RPM
+		default:
+			return "", fmt.Errorf("unsupported package format %q", format)
+		}
+		if packageArchitecture == expected {
+			return architecture, nil
+		}
+	}
+
+	return "", fmt.Errorf("%s architecture %q is not registered", strings.ToUpper(format), packageArchitecture)
+}
+
 func resolveOne(dir string, pattern string) (string, error) {
-	matches, err := filepath.Glob(filepath.Join(dir, pattern))
+	matches, err := resolveMany(dir, pattern, 1)
 	if err != nil {
-		return "", fmt.Errorf("match release asset %q: %w", pattern, err)
-	}
-	if len(matches) != 1 {
-		return "", fmt.Errorf("asset pattern %q matched %d files, expected exactly one", pattern, len(matches))
-	}
-	info, err := os.Lstat(matches[0])
-	if err != nil {
-		return "", fmt.Errorf("inspect release asset %s: %w", filepath.Base(matches[0]), err)
-	}
-	if !info.Mode().IsRegular() {
-		return "", fmt.Errorf("release asset %s must be a regular file", filepath.Base(matches[0]))
+		return "", err
 	}
 
 	return matches[0], nil
+}
+
+func resolveMany(dir string, pattern string, expected int) ([]string, error) {
+	matches, err := filepath.Glob(filepath.Join(dir, pattern))
+	if err != nil {
+		return nil, fmt.Errorf("match release asset %q: %w", pattern, err)
+	}
+	if len(matches) != expected {
+		return nil, fmt.Errorf("asset pattern %q matched %d files, expected %d", pattern, len(matches), expected)
+	}
+	for _, match := range matches {
+		info, statErr := os.Lstat(match)
+		if statErr != nil {
+			return nil, fmt.Errorf("inspect release asset %s: %w", filepath.Base(match), statErr)
+		}
+		if !info.Mode().IsRegular() {
+			return nil, fmt.Errorf("release asset %s must be a regular file", filepath.Base(match))
+		}
+	}
+
+	return matches, nil
 }
 
 func readChecksums(path string) (map[string]string, error) {
@@ -595,7 +761,7 @@ func verifyManifestPackages(root string, manifest Manifest) error {
 		var path string
 		switch record.Format {
 		case formatDEB:
-			path = filepath.Join(root, "apt", "pool", manifest.Project, record.File)
+			path = filepath.Join(root, "apt", "pool", manifest.Project, record.RepositoryArchitecture, record.File)
 		case formatRPM:
 			path = filepath.Join(root, "rpm", manifest.Project, record.Architecture, record.File)
 		default:

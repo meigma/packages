@@ -57,7 +57,7 @@ The following remain deferred beyond the first staging slice:
 
 - automated renewal or an OIDC broker before the prefix-scoped staging credential expires in July 2027;
 - the final Cloudflare cache ruleset for immutable and mutable object classes;
-- GitHub Release discovery and production registry entries;
+- automated GitHub Release discovery in a privileged publish workflow;
 - an explicit empty-prefix disaster-recovery rehearsal;
 - production remote apply and deletion;
 - consumer repository dispatch.
