@@ -17,15 +17,18 @@ graph includes Go checks, documentation, signed fixture candidates, clean
 package installation, deterministic rebuild/no-op proof, ordered sync-plan
 fault coverage, and workflow policy enforcement.
 
-`Publish validation` is manually dispatched with a registered project and
-stable release tag. It validates the request and proves the real GitHub Release
-source path without secrets.
+`Publish validation` accepts either a manual request or the exact
+`publish-package` repository dispatch event. Both paths validate the registered
+project and stable release tag and prove the real GitHub Release source path
+without secrets. The consumer payload is confined to `project` and `tag`.
 
 `Rebuild validation` is manually dispatched with a fixture project. It
 validates the project and runs the Phase 2 deterministic rebuild proof.
 
-Without the explicit `apply_staging` input, the validation workflows change no
-package repository state.
+Manual requests change no package repository state without the explicit
+`apply_staging` input. A trusted consumer dispatch always continues through
+protected staging and production after validation. It cannot request staging
+deletion or supply either protected-operation confirmation.
 
 `Publish validation` can additionally run a manually selected, protected
 `staging` job after its read-only validation succeeds. It imports only the
@@ -54,7 +57,7 @@ All checked-in workflows currently require:
 - GitHub-hosted runners;
 - full commit SHA pins for actions;
 - checkout credential persistence disabled;
-- secrets and deployment environments only inside dedicated manual staging and production jobs;
+- secrets and deployment environments only inside dedicated staging and production jobs;
 - no privileged pull-request triggers.
 
 The policy is executable through `moon run root:workflow-check`. It permits
@@ -78,8 +81,8 @@ subkey, never the primary signing key.
 
 ## Deferred follow-up
 
-The following remain deferred beyond the first staging slice:
+The following remain deferred beyond the initial production slice:
 
 - automated credential renewal or an OIDC broker;
 - a general production release selector after the initial `v1.0.0` rehearsal;
-- consumer repository dispatch.
+- consumer-side release dispatch and its end-to-end proof.

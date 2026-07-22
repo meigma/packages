@@ -13,6 +13,10 @@ The `meigma-packages` binary is an implementation detail of this repository. It
 is built and run from source in local development and GitHub Actions, and is not
 published as a general-purpose release artifact.
 
+To install published software, follow the [APT and RPM installation
+guide](docs/docs/install.md). The repository signing-key fingerprint is
+`9C74476A669465EEB8D46AD8B0E68773B6E259F6`.
+
 ## Local setup
 
 Install [mise](https://mise.jdx.dev), then provision the pinned toolchain:
@@ -105,10 +109,15 @@ the environment-variable prefix for future configuration.
 
 ## Protected publication
 
-The manual `Publish validation` and `Rebuild validation` workflows exercise the
+The `Publish validation` and manual `Rebuild validation` workflows exercise the
 same fixture-backed proofs on GitHub-hosted runners. They use
 `meigma-packages validate-request` to reject unknown projects, unsafe project
 names, and invalid stable release tags before invoking the local proof.
+
+`Publish validation` also accepts the exact `publish-package` repository
+dispatch event from a trusted consumer. Its payload is restricted to `project`
+and `tag`; a valid dispatch always enters protected staging and production and
+cannot request staging deletion.
 
 Both validation jobs are unprivileged. `Publish validation` can additionally
 run the protected staging job with `apply_staging=true`. Selecting
