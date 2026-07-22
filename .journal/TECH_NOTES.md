@@ -14,8 +14,10 @@
   fixture-backed publish/rebuild validation workflows, pinned actionlint and
   ShellCheck, executable workflow/image policy, and the initial operations
   boundary. PR #9 added exact-prefix R2 apply and verification, passphrase-file
-  signing, and the protected staging rehearsal; Phase 4 is complete and Phase 5
-  production/consumer integration is next.
+  signing, and the protected staging rehearsal. PRs #10–#12 completed the first
+  Phase 5 path: verified GitHub Release ingestion, multi-architecture APT/RPM
+  rebuilds, protected production-root publication, trusted consumer dispatch,
+  public installation documentation, no-op verification, and clean installs.
 - Phase 3 validation remains manual, read-only, GitHub-hosted, and disconnected
   from secrets, deployment environments, R2, and remote mutation. The Phase 4
   publish workflow keeps that job as an unprivileged prerequisite and performs
@@ -40,9 +42,10 @@
   and proves package resolution or installation after publication. DNF5 cache
   refresh success alone is insufficient because it may hide a disabled repo.
 - Cross-repository dispatch uses one private Meigma GitHub App with repository
-  `Contents: write`, installed only on `meigma/packages`. Approved consumer
-  workflows receive selected-repository organization configuration and mint
-  short-lived tokens restricted to the `packages` repository.
+  `Contents: write`. Its installation uses selected-repository access for
+  `homebrew-tap`, `scoop-bucket`, and `packages`; the `incus-gh-runner`
+  workflow mints a short-lived token restricted to the `packages` repository
+  and sends only the fixed project plus a validated stable tag.
 - Staging uses R2 bucket `meigma-packages`, custom domain `pkgs.meigma.dev`, and
   exact prefix `_staging/`; the managed `r2.dev` endpoint is disabled. The
   publisher fails closed unless both the prefix and public staging URL match.
@@ -51,7 +54,8 @@
   and remain uncached.
 - The production repository key is Ed25519 primary
   `9C74476A669465EEB8D46AD8B0E68773B6E259F6` with signing subkey
-  `9DA41FD9DBD38B19AC75454D27CCA9E924245272`. Backups and the one-year
-  prefix-scoped R2 credential live in the 1Password `Homelab` vault; GitHub has
-  only the signing-only export and passphrase. Renew or replace the credential
-  before `2027-07-18T19:51:37Z`.
+  `9DA41FD9DBD38B19AC75454D27CCA9E924245272`. Signing backups, passphrase, and
+  staging/production R2 source credentials live in the 1Password `Meigma`
+  vault; GitHub receives only the signing-only export, passphrase, and separate
+  environment-scoped R2 credentials. Renew or replace the one-year staging
+  credential before `2027-07-18T19:51:37Z`.
