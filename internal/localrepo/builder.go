@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -56,6 +57,8 @@ type Result struct {
 	Root string `json:"root"`
 	// DEBArchitecture is the native APT index architecture.
 	DEBArchitecture string `json:"deb_architecture"`
+	// DEBArchitectures lists all native APT index architectures for a multi-architecture build.
+	DEBArchitectures []string `json:"deb_architectures,omitempty"`
 	// SigningKey is the fingerprint used for metadata signatures.
 	SigningKey string `json:"signing_key"`
 }
@@ -65,9 +68,10 @@ type builder struct {
 }
 
 type candidateAsset struct {
-	debPath         string
-	rpmPath         string
-	rpmArchitecture string
+	debPath                   string
+	debRepositoryArchitecture string
+	rpmPath                   string
+	rpmArchitecture           string
 }
 
 // Build creates and verifies a local APT/RPM candidate tree from fixture assets.
@@ -104,7 +108,7 @@ func (instance builder) buildCandidate(
 		return Result{}, rootErr
 	}
 
-	architecture, err := instance.buildAPT(ctx, request, assets)
+	architectures, err := instance.buildAPT(ctx, request, assets)
 	if err != nil {
 		return Result{}, cleanupFailedBuild(request.Root, err)
 	}
@@ -115,13 +119,19 @@ func (instance builder) buildCandidate(
 		return Result{}, cleanupFailedBuild(request.Root, verifyErr)
 	}
 
-	return Result{
-		Project:         request.Project,
-		PackageName:     project.PackageName,
-		Root:            request.Root,
-		DEBArchitecture: architecture,
-		SigningKey:      request.SigningKey,
-	}, nil
+	result := Result{
+		Project:     request.Project,
+		PackageName: project.PackageName,
+		Root:        request.Root,
+		SigningKey:  request.SigningKey,
+	}
+	if len(architectures) == 1 {
+		result.DEBArchitecture = architectures[0]
+	} else {
+		result.DEBArchitectures = architectures
+	}
+
+	return result, nil
 }
 
 func (request Request) validate() error {
@@ -168,22 +178,84 @@ func (instance builder) buildAPT(
 	ctx context.Context,
 	request Request,
 	assets []candidateAsset,
-) (string, error) {
-	architectureOutput, err := instance.runner.run(ctx, "", nil, "dpkg", "--print-architecture")
+) ([]string, error) {
+	architectureAssets, legacy, err := instance.groupAPTAssets(ctx, assets)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	architecture := strings.TrimSpace(string(architectureOutput))
+	architectures := sortedKeys(architectureAssets)
 	aptRoot := filepath.Join(request.Root, "apt")
-	binaryDir := filepath.Join("dists", "stable", request.Project, "binary-"+architecture)
-	poolDir := filepath.Join(aptRoot, "pool", request.Project)
+	for _, architecture := range architectures {
+		if err := instance.buildAPTIndex(
+			ctx,
+			aptRoot,
+			request.Project,
+			architecture,
+			architectureAssets[architecture],
+			legacy,
+		); err != nil {
+			return nil, err
+		}
+	}
+	if err := instance.writeAndSignRelease(ctx, request, aptRoot, architectures); err != nil {
+		return nil, err
+	}
 
-	if mkdirErr := os.MkdirAll(filepath.Join(aptRoot, binaryDir), directoryMode); mkdirErr != nil {
-		return "", fmt.Errorf("create APT index directory: %w", mkdirErr)
+	return architectures, nil
+}
+
+func (instance builder) groupAPTAssets(
+	ctx context.Context,
+	assets []candidateAsset,
+) (map[string][]candidateAsset, bool, error) {
+	architectureAssets := make(map[string][]candidateAsset)
+	legacy := false
+	for _, asset := range assets {
+		architecture := asset.debRepositoryArchitecture
+		if architecture == "" {
+			architectureOutput, err := instance.runner.run(ctx, "", nil, "dpkg", "--print-architecture")
+			if err != nil {
+				return nil, false, err
+			}
+			architecture = strings.TrimSpace(string(architectureOutput))
+			legacy = true
+		}
+		architectureAssets[architecture] = append(architectureAssets[architecture], asset)
+	}
+
+	return architectureAssets, legacy, nil
+}
+
+func sortedKeys[T any](values map[string]T) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	return keys
+}
+
+func (instance builder) buildAPTIndex(
+	ctx context.Context,
+	aptRoot string,
+	project string,
+	architecture string,
+	assets []candidateAsset,
+	legacy bool,
+) error {
+	binaryDir := filepath.Join("dists", "stable", project, "binary-"+architecture)
+	poolRelative := filepath.Join("pool", project, architecture)
+	if legacy {
+		poolRelative = filepath.Join("pool", project)
+	}
+	poolDir := filepath.Join(aptRoot, poolRelative)
+	if err := os.MkdirAll(filepath.Join(aptRoot, binaryDir), directoryMode); err != nil {
+		return fmt.Errorf("create APT index directory: %w", err)
 	}
 	for _, asset := range assets {
-		if copyErr := copyAssetPath(asset.debPath, poolDir); copyErr != nil {
-			return "", copyErr
+		if err := copyAssetPath(asset.debPath, poolDir); err != nil {
+			return err
 		}
 	}
 
@@ -193,36 +265,33 @@ func (instance builder) buildAPT(
 		nil,
 		"apt-ftparchive",
 		"packages",
-		filepath.ToSlash(filepath.Join("pool", request.Project)),
+		filepath.ToSlash(poolRelative),
 	)
 	if err != nil {
-		return "", err
+		return err
 	}
 	packagesPath := filepath.Join(aptRoot, binaryDir, "Packages")
 	if err := os.WriteFile(packagesPath, packages, publicFileMode); err != nil {
-		return "", fmt.Errorf("write APT Packages index: %w", err)
+		return fmt.Errorf("write APT Packages index: %w", err)
 	}
 	if err := writeGzip(packagesPath); err != nil {
-		return "", err
+		return err
 	}
 	if err := writeByHash(packagesPath); err != nil {
-		return "", err
+		return err
 	}
 	if err := writeByHash(packagesPath + ".gz"); err != nil {
-		return "", err
-	}
-	if err := instance.writeAndSignRelease(ctx, request, aptRoot, architecture); err != nil {
-		return "", err
+		return err
 	}
 
-	return architecture, nil
+	return nil
 }
 
 func (instance builder) writeAndSignRelease(
 	ctx context.Context,
 	request Request,
 	aptRoot string,
-	architecture string,
+	architectures []string,
 ) error {
 	releaseDir := filepath.Join(aptRoot, "dists", "stable")
 	release, err := instance.runner.run(
@@ -234,7 +303,7 @@ func (instance builder) writeAndSignRelease(
 		"-o", "APT::FTPArchive::Release::Label=Meigma",
 		"-o", "APT::FTPArchive::Release::Suite=stable",
 		"-o", "APT::FTPArchive::Release::Codename=stable",
-		"-o", "APT::FTPArchive::Release::Architectures="+architecture,
+		"-o", "APT::FTPArchive::Release::Architectures="+strings.Join(architectures, " "),
 		"-o", "APT::FTPArchive::Release::Components="+request.Project,
 		"-o", "APT::FTPArchive::Release::Acquire-By-Hash=yes",
 		"-o", "APT::FTPArchive::Release::Description=Meigma local candidate",

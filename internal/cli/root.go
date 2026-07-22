@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/meigma/packages/internal/githubrelease"
 	"github.com/meigma/packages/internal/localrepo"
 	"github.com/meigma/packages/internal/r2repo"
 )
@@ -18,6 +19,9 @@ type LocalBuildFunc func(context.Context, localrepo.Request) (localrepo.Result, 
 
 // LocalRebuildFunc rebuilds a candidate from fixture release sets.
 type LocalRebuildFunc func(context.Context, localrepo.RebuildRequest) (localrepo.RebuildResult, error)
+
+// FetchReleaseFunc downloads and verifies one registered GitHub Release.
+type FetchReleaseFunc func(context.Context, githubrelease.Request) (githubrelease.Result, error)
 
 // SyncPlanFunc computes an ordered candidate-to-remote filesystem plan.
 type SyncPlanFunc func(string, string) (localrepo.SyncPlan, error)
@@ -54,6 +58,8 @@ type Options struct {
 	BuildLocal LocalBuildFunc
 	// RebuildLocal supplies the deterministic fixture-set rebuild implementation.
 	RebuildLocal LocalRebuildFunc
+	// FetchRelease supplies the registered GitHub Release discovery implementation.
+	FetchRelease FetchReleaseFunc
 	// PlanSync supplies the ordered filesystem planning implementation.
 	PlanSync SyncPlanFunc
 	// ApplySync supplies the ordered R2 mutation implementation.
@@ -81,6 +87,9 @@ func NewRootCommand(options Options) *cobra.Command {
 	}
 	if options.RebuildLocal == nil {
 		options.RebuildLocal = localrepo.Rebuild
+	}
+	if options.FetchRelease == nil {
+		options.FetchRelease = githubrelease.Fetch
 	}
 	if options.PlanSync == nil {
 		options.PlanSync = localrepo.PlanSync
@@ -119,6 +128,7 @@ func NewRootCommand(options Options) *cobra.Command {
 	root.SetErr(options.Err)
 	root.AddCommand(newBuildLocalCommand(options))
 	root.AddCommand(newRebuildLocalCommand(options))
+	root.AddCommand(newFetchReleaseCommand(options))
 	root.AddCommand(newPlanSyncCommand(options))
 	root.AddCommand(newApplySyncCommand(options))
 	root.AddCommand(newValidateRequestCommand(options))

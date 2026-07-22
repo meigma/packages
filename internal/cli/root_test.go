@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/meigma/packages/internal/githubrelease"
 	"github.com/meigma/packages/internal/localrepo"
 	"github.com/meigma/packages/internal/r2repo"
 )
@@ -149,6 +150,63 @@ func TestRebuildLocalCommandPassesResolvedRequestAndPrintsResult(t *testing.T) {
 		"selected_versions":["v2.0.0","v1.1.0"],
 		"desired_state_digest":"abc123",
 		"no_op":false
+	}`, stdout.String())
+	assert.Empty(t, stderr.String())
+}
+
+func TestFetchReleaseCommandPassesResolvedRequestAndPrintsResult(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	expectedRequest := githubrelease.Request{
+		RegistryPath: "/fixtures/projects.yml",
+		Project:      "incus-gh-runner",
+		Tag:          "v1.0.0",
+		OutputDir:    "/tmp/releases/v1.0.0",
+		Token:        "test-token",
+	}
+	expectedResult := githubrelease.Result{
+		Project:    expectedRequest.Project,
+		Repository: "meigma/incus-gh-runner",
+		Tag:        expectedRequest.Tag,
+		OutputDir:  expectedRequest.OutputDir,
+		Assets: []githubrelease.Asset{{
+			Name:   "checksums.txt",
+			SHA256: "abc123",
+			Size:   42,
+		}},
+	}
+	vp := viper.New()
+	vp.Set("github-token", expectedRequest.Token)
+	root := NewRootCommand(Options{
+		Out:   &stdout,
+		Err:   &stderr,
+		Viper: vp,
+		FetchRelease: func(
+			_ context.Context,
+			request githubrelease.Request,
+		) (githubrelease.Result, error) {
+			assert.Equal(t, expectedRequest, request)
+
+			return expectedResult, nil
+		},
+	})
+	root.SetArgs([]string{
+		"fetch-release",
+		"--registry", expectedRequest.RegistryPath,
+		"--project", expectedRequest.Project,
+		"--tag", expectedRequest.Tag,
+		"--output", expectedRequest.OutputDir,
+	})
+
+	require.NoError(t, root.ExecuteContext(context.Background()))
+	assert.JSONEq(t, `{
+		"project":"incus-gh-runner",
+		"repository":"meigma/incus-gh-runner",
+		"tag":"v1.0.0",
+		"output_dir":"/tmp/releases/v1.0.0",
+		"assets":[{"name":"checksums.txt","sha256":"abc123","size":42}]
 	}`, stdout.String())
 	assert.Empty(t, stderr.String())
 }

@@ -102,6 +102,67 @@ projects:
 	}
 }
 
+func TestLoadReleaseSource(t *testing.T) {
+	t.Parallel()
+
+	registryPath := writeRegistry(t, `schema: 1
+projects:
+  incus-gh-runner:
+    repository: meigma/incus-gh-runner
+    package_name: incus-gh-runner
+    assets:
+      checksums: checksums.txt
+      deb: 'incus-gh-runner_${version}_*.deb'
+      rpm: 'incus-gh-runner-${version}-1.*.rpm'
+    architectures:
+      amd64:
+        deb: amd64
+        rpm: x86_64
+      arm64:
+        deb: arm64
+        rpm: aarch64
+    provenance:
+      signer_workflow: meigma/incus-gh-runner/.github/workflows/attest.yml
+`)
+
+	source, err := LoadReleaseSource(registryPath, "incus-gh-runner")
+
+	require.NoError(t, err)
+	assert.Equal(t, "meigma/incus-gh-runner", source.Repository)
+	assert.Equal(t, "checksums.txt", source.Checksums)
+	assert.Equal(t, "aarch64", source.Architectures["arm64"].RPM)
+	assert.Equal(t, "meigma/incus-gh-runner/.github/workflows/attest.yml", source.SignerWorkflow)
+}
+
+func TestLoadReleaseSourceRejectsDuplicatePackageArchitectureMappings(t *testing.T) {
+	t.Parallel()
+
+	registryPath := writeRegistry(t, `schema: 1
+projects:
+  incus-gh-runner:
+    repository: meigma/incus-gh-runner
+    package_name: incus-gh-runner
+    assets:
+      checksums: checksums.txt
+      deb: '*.deb'
+      rpm: '*.rpm'
+    architectures:
+      amd64:
+        deb: amd64
+        rpm: x86_64
+      arm64:
+        deb: amd64
+        rpm: aarch64
+    provenance:
+      signer_workflow: meigma/incus-gh-runner/.github/workflows/attest.yml
+`)
+
+	_, err := LoadReleaseSource(registryPath, "incus-gh-runner")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "use the same DEB mapping")
+}
+
 func TestBuildRejectsAnExistingCandidateRoot(t *testing.T) {
 	t.Parallel()
 
