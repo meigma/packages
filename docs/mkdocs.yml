@@ -34,6 +34,7 @@ theme:
 
 nav:
   - Home: index.md
+  - Install packages: install.md
   - Operations boundary: operations.md
 
 plugins:

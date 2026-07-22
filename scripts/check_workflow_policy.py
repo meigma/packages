@@ -12,6 +12,57 @@ USES = re.compile(r"^\s*(?:-\s+)?uses:\s*([^@\s]+)@([^\s#]+)")
 IMAGE_DIGEST = re.compile(r"@sha256:[0-9a-f]{64}$")
 IMAGE_ASSIGNMENT = re.compile(r"^[a-z0-9_]+_image=['\"]?([^'\"\s]+)")
 PRIVILEGED_WORKFLOWS = {"publish.yml"}
+PUBLISH_DISPATCH_PAYLOAD_FIELDS = {"project", "tag"}
+
+
+def validate_publish_dispatch_contract(text: str) -> list[str]:
+    """Return violations in the trusted consumer dispatch boundary."""
+    violations: list[str] = []
+    required_fragments = (
+        (
+            "publish workflow must accept only the publish-package dispatch type",
+            "  repository_dispatch:\n    types: [publish-package]",
+            1,
+        ),
+        (
+            "consumer dispatch must map only its project into every privileged job",
+            "PROJECT: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.project || inputs.project }}",
+            3,
+        ),
+        (
+            "consumer dispatch must map only its tag into every privileged job",
+            "TAG: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.tag || inputs.tag }}",
+            3,
+        ),
+        (
+            "consumer dispatch must always enter staging",
+            "github.event_name == 'repository_dispatch' || inputs.apply_staging",
+            2,
+        ),
+        (
+            "consumer dispatch must always continue to production",
+            "github.event_name == 'repository_dispatch' || inputs.apply_production",
+            2,
+        ),
+        (
+            "consumer dispatch must not expose staging deletion",
+            "EMPTY_STAGING: ${{ github.event_name == 'workflow_dispatch' && inputs.empty_staging }}",
+            2,
+        ),
+    )
+    for message, fragment, count in required_fragments:
+        if text.count(fragment) != count:
+            violations.append(message)
+
+    payload_fields = set(
+        re.findall(r"github\.event\.client_payload\.([A-Za-z0-9_-]+)", text)
+    )
+    if payload_fields != PUBLISH_DISPATCH_PAYLOAD_FIELDS:
+        violations.append(
+            "repository dispatch payload must be confined to project and tag"
+        )
+
+    return violations
 
 
 def validate_workflow(path: Path) -> list[str]:
@@ -19,6 +70,9 @@ def validate_workflow(path: Path) -> list[str]:
     text = path.read_text(encoding="utf-8")
     lines = text.splitlines()
     violations: list[str] = []
+
+    if path.name == "publish.yml":
+        violations.extend(validate_publish_dispatch_contract(text))
 
     if not re.search(r"(?m)^permissions: \{\}$", text):
         violations.append("top-level permissions must be empty")

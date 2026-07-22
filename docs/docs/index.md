@@ -42,7 +42,9 @@ run it from this repository.
   shell, full-SHA action pins, read-only permissions, and the Phase 3
   no-secrets boundary.
 
-The manually dispatched publish workflow validates without secrets, then can
-hand off to protected staging and production jobs only through explicit inputs
-and exact confirmation phrases. See [Operations boundary](operations.md) for
-the enforced scope and recovery behavior.
+The publish workflow validates without secrets, then hands off to protected
+staging and production. Manual runs require explicit inputs and exact
+confirmation phrases. A trusted consumer dispatch supplies only a registered
+project and stable tag and cannot select deletion behavior. See [Install
+packages](install.md) for the public repository commands and [Operations
+boundary](operations.md) for the enforced scope and recovery behavior.

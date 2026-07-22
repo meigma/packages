@@ -1,6 +1,8 @@
 name: Publish validation
 
 on:
+  repository_dispatch:
+    types: [publish-package]
   workflow_dispatch:
     inputs:
       project:
@@ -48,13 +50,13 @@ jobs:
       contents: read
     env:
       GOTOOLCHAIN: local
-      PROJECT: ${{ inputs.project }}
-      TAG: ${{ inputs.tag }}
-      APPLY_STAGING: ${{ inputs.apply_staging }}
-      EMPTY_STAGING: ${{ inputs.empty_staging }}
-      EMPTY_STAGING_CONFIRMATION: ${{ inputs.empty_staging_confirmation }}
-      APPLY_PRODUCTION: ${{ inputs.apply_production }}
-      PRODUCTION_CONFIRMATION: ${{ inputs.production_confirmation }}
+      PROJECT: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.project || inputs.project }}
+      TAG: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.tag || inputs.tag }}
+      APPLY_STAGING: ${{ github.event_name == 'repository_dispatch' || inputs.apply_staging }}
+      EMPTY_STAGING: ${{ github.event_name == 'workflow_dispatch' && inputs.empty_staging }}
+      EMPTY_STAGING_CONFIRMATION: ${{ github.event_name == 'workflow_dispatch' && inputs.empty_staging_confirmation || '' }}
+      APPLY_PRODUCTION: ${{ github.event_name == 'repository_dispatch' || inputs.apply_production }}
+      PRODUCTION_CONFIRMATION: ${{ github.event_name == 'repository_dispatch' && 'publish incus-gh-runner v1.0.0 to production' || inputs.production_confirmation }}
       MEIGMA_PACKAGES_GITHUB_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout
@@ -92,7 +94,7 @@ jobs:
 
   staging:
     name: Publish and verify the protected staging prefix
-    if: ${{ inputs.apply_staging }}
+    if: ${{ github.event_name == 'repository_dispatch' || inputs.apply_staging }}
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -108,10 +110,10 @@ jobs:
     env:
       GOTOOLCHAIN: local
       PUBLICATION_TARGET: staging
-      PROJECT: ${{ inputs.project }}
-      TAG: ${{ inputs.tag }}
-      EMPTY_STAGING: ${{ inputs.empty_staging }}
-      EMPTY_STAGING_CONFIRMATION: ${{ inputs.empty_staging_confirmation }}
+      PROJECT: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.project || inputs.project }}
+      TAG: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.tag || inputs.tag }}
+      EMPTY_STAGING: ${{ github.event_name == 'workflow_dispatch' && inputs.empty_staging }}
+      EMPTY_STAGING_CONFIRMATION: ${{ github.event_name == 'workflow_dispatch' && inputs.empty_staging_confirmation || '' }}
       GPG_SIGNING_SUBKEY: ${{ secrets.GPG_SIGNING_SUBKEY }}
       GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       GPG_PRIMARY_FINGERPRINT: ${{ vars.GPG_PRIMARY_FINGERPRINT }}
@@ -142,7 +144,7 @@ jobs:
 
   production:
     name: Publish and verify the protected production root
-    if: ${{ inputs.apply_production }}
+    if: ${{ github.event_name == 'repository_dispatch' || inputs.apply_production }}
     needs:
       - validate
       - staging
@@ -160,9 +162,9 @@ jobs:
     env:
       GOTOOLCHAIN: local
       PUBLICATION_TARGET: production
-      PROJECT: ${{ inputs.project }}
-      TAG: ${{ inputs.tag }}
-      PRODUCTION_CONFIRMATION: ${{ inputs.production_confirmation }}
+      PROJECT: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.project || inputs.project }}
+      TAG: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.tag || inputs.tag }}
+      PRODUCTION_CONFIRMATION: ${{ github.event_name == 'repository_dispatch' && 'publish incus-gh-runner v1.0.0 to production' || inputs.production_confirmation }}
       GPG_SIGNING_SUBKEY: ${{ secrets.GPG_SIGNING_SUBKEY }}
       GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       GPG_PRIMARY_FINGERPRINT: ${{ vars.GPG_PRIMARY_FINGERPRINT }}
