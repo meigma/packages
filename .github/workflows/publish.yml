@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       project:
-        description: Fixture registry project to validate
+        description: Registered project to publish
         required: true
-        default: phase1-fixture
+        default: incus-gh-runner
         type: string
       tag:
         description: Stable v-prefixed release tag to validate
@@ -14,10 +14,28 @@ on:
         default: v1.0.0
         type: string
       apply_staging:
-        description: Apply the verified fixture candidate to the protected staging prefix
+        description: Publish the verified release to the protected staging prefix
         required: true
         default: false
         type: boolean
+      empty_staging:
+        description: Empty only _staging/ before rebuilding it from the release
+        required: true
+        default: false
+        type: boolean
+      empty_staging_confirmation:
+        description: Type "empty _staging only" when empty_staging is selected
+        required: false
+        type: string
+      apply_production:
+        description: Publish to the protected production root after staging succeeds
+        required: true
+        default: false
+        type: boolean
+      production_confirmation:
+        description: Type "publish incus-gh-runner v1.0.0 to production"
+        required: false
+        type: string
 
 permissions: {}
 
@@ -26,11 +44,18 @@ jobs:
     name: Validate publish path without secrets
     runs-on: ubuntu-latest
     permissions:
+      attestations: read
       contents: read
     env:
       GOTOOLCHAIN: local
       PROJECT: ${{ inputs.project }}
       TAG: ${{ inputs.tag }}
+      APPLY_STAGING: ${{ inputs.apply_staging }}
+      EMPTY_STAGING: ${{ inputs.empty_staging }}
+      EMPTY_STAGING_CONFIRMATION: ${{ inputs.empty_staging_confirmation }}
+      APPLY_PRODUCTION: ${{ inputs.apply_production }}
+      PRODUCTION_CONFIRMATION: ${{ inputs.production_confirmation }}
+      MEIGMA_PACKAGES_GITHUB_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -47,12 +72,23 @@ jobs:
       - name: Validate request
         run: >-
           go run ./cmd/meigma-packages validate-request
-          --registry testdata/phase1/projects.yml
+          --registry projects.yml
           --project "$PROJECT"
           --tag "$TAG"
 
-      - name: Prove the local publish path
-        run: moon run root:phase1-proof
+      - name: Validate protected publication selections
+        run: |
+          if [[ "$EMPTY_STAGING" == true ]]; then
+            [[ "$APPLY_STAGING" == true ]]
+            [[ "$EMPTY_STAGING_CONFIRMATION" == 'empty _staging only' ]]
+          fi
+          if [[ "$APPLY_PRODUCTION" == true ]]; then
+            [[ "$APPLY_STAGING" == true ]]
+            [[ "$PRODUCTION_CONFIRMATION" == 'publish incus-gh-runner v1.0.0 to production' ]]
+          fi
+
+      - name: Prove the real release source path
+        run: scripts/phase5-source.sh
 
   staging:
     name: Publish and verify the protected staging prefix
@@ -61,6 +97,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
+      attestations: read
       contents: read
     environment:
       name: staging
@@ -70,6 +107,11 @@ jobs:
       cancel-in-progress: false
     env:
       GOTOOLCHAIN: local
+      PUBLICATION_TARGET: staging
+      PROJECT: ${{ inputs.project }}
+      TAG: ${{ inputs.tag }}
+      EMPTY_STAGING: ${{ inputs.empty_staging }}
+      EMPTY_STAGING_CONFIRMATION: ${{ inputs.empty_staging_confirmation }}
       GPG_SIGNING_SUBKEY: ${{ secrets.GPG_SIGNING_SUBKEY }}
       GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       GPG_PRIMARY_FINGERPRINT: ${{ vars.GPG_PRIMARY_FINGERPRINT }}
@@ -81,6 +123,7 @@ jobs:
       R2_PREFIX: ${{ vars.R2_PREFIX }}
       R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
       PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL }}
+      MEIGMA_PACKAGES_GITHUB_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout trusted workflow source
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -94,5 +137,56 @@ jobs:
           version: 2026.6.14
           cache: true
 
-      - name: Publish and verify staging
-        run: scripts/phase4-staging.sh
+      - name: Publish and verify the real release in staging
+        run: scripts/phase5-publish.sh
+
+  production:
+    name: Publish and verify the protected production root
+    if: ${{ inputs.apply_production }}
+    needs:
+      - validate
+      - staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      attestations: read
+      contents: read
+    environment:
+      name: production
+      url: https://pkgs.meigma.dev/
+    concurrency:
+      group: meigma-packages-r2-production
+      cancel-in-progress: false
+    env:
+      GOTOOLCHAIN: local
+      PUBLICATION_TARGET: production
+      PROJECT: ${{ inputs.project }}
+      TAG: ${{ inputs.tag }}
+      PRODUCTION_CONFIRMATION: ${{ inputs.production_confirmation }}
+      GPG_SIGNING_SUBKEY: ${{ secrets.GPG_SIGNING_SUBKEY }}
+      GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      GPG_PRIMARY_FINGERPRINT: ${{ vars.GPG_PRIMARY_FINGERPRINT }}
+      GPG_SIGNING_FINGERPRINT: ${{ vars.GPG_SIGNING_FINGERPRINT }}
+      MEIGMA_PACKAGES_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      MEIGMA_PACKAGES_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      MEIGMA_PACKAGES_R2_SESSION_TOKEN: ${{ secrets.R2_SESSION_TOKEN }}
+      R2_BUCKET: ${{ vars.R2_BUCKET }}
+      R2_PREFIX: ''
+      R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+      PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL }}
+      MEIGMA_PACKAGES_GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout trusted workflow source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          version: 2026.6.14
+          cache: true
+
+      - name: Publish and verify the real release in production
+        run: scripts/phase5-publish.sh

@@ -3,11 +3,11 @@
 `meigma/packages` builds and publishes the signed APT and RPM repositories used
 by Meigma projects. It builds verified candidates from fixture release sets,
 applies deterministic retention, proves rebuild/no-op behavior, and executes
-deletion-safe sync plans. Phase 4 adds an opt-in protected path that signs with
-the CI signing subkey, publishes only under the R2 `_staging/` prefix, verifies
-the remote result, and installs through the public hostname. Phase 5 adds the
-canonical project registry and verified GitHub Release discovery. Production
-publication remains a later phase.
+deletion-safe sync plans. The protected publication path signs with the CI
+signing subkey, publishes a verified GitHub Release to either the isolated R2
+`_staging/` prefix or the production root, verifies the remote result, and
+installs through the public hostname. The initial production slice is confined
+to `incus-gh-runner` `v1.0.0` while that boundary is rehearsed.
 
 The `meigma-packages` binary is an implementation detail of this repository. It
 is built and run from source in local development and GitHub Actions, and is not
@@ -41,8 +41,9 @@ moon run root:check
 The aggregate `root:check` task also builds the local documentation. CI runs
 the affected equivalent with `moon ci --summary minimal`. Workflow validation
 uses pinned `actionlint` and ShellCheck versions plus a repository policy that
-keeps routine jobs read-only, GitHub-hosted, and full-SHA pinned. Secrets and a
-deployment environment are allowed only in the dedicated manual staging job.
+keeps routine jobs read-only, GitHub-hosted, and full-SHA pinned. Secrets and
+deployment environments are allowed only in dedicated manual staging and
+production jobs.
 
 The CLI scaffold can be exercised directly:
 
@@ -102,7 +103,7 @@ The entrypoint under `cmd/meigma-packages` remains thin. Cobra/Viper command
 construction lives under `internal/cli`, with `MEIGMA_PACKAGES_*` reserved as
 the environment-variable prefix for future configuration.
 
-## Workflow validation and staging
+## Protected publication
 
 The manual `Publish validation` and `Rebuild validation` workflows exercise the
 same fixture-backed proofs on GitHub-hosted runners. They use
@@ -110,10 +111,18 @@ same fixture-backed proofs on GitHub-hosted runners. They use
 names, and invalid stable release tags before invoking the local proof.
 
 Both validation jobs are unprivileged. `Publish validation` can additionally
-run the protected staging job when manually dispatched with
-`apply_staging=true`; it publishes and verifies only `_staging/` and has no
-production selection. See the [operations boundary](docs/docs/operations.md)
-before extending the privileged boundary.
+run the protected staging job with `apply_staging=true`. Selecting
+`empty_staging=true` requires the exact `empty _staging only` confirmation and
+rehearses recovery by emptying and rebuilding that prefix only.
+
+Production is a second protected job that can run only after staging succeeds.
+It requires `apply_production=true` and the exact
+`publish incus-gh-runner v1.0.0 to production` confirmation. Root publication
+preserves every `_staging/` object and rejects incomplete candidates before
+remote access. Immutable package and content-addressed metadata objects receive
+a one-year immutable cache policy; activation metadata, state, keys, and repo
+configuration remain `no-store`. Production deletion is not an operator mode.
+See the [operations boundary](docs/docs/operations.md) before dispatching it.
 
 ## Documentation
 

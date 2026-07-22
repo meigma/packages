@@ -19,6 +19,7 @@ func newApplySyncCommand(options Options) *cobra.Command {
 				Root:            options.Viper.GetString("root"),
 				Bucket:          options.Viper.GetString("bucket"),
 				Prefix:          options.Viper.GetString("prefix"),
+				ProductionRoot:  options.Viper.GetBool("production-root"),
 				Endpoint:        options.Viper.GetString("endpoint"),
 				AccessKeyID:     options.Viper.GetString("r2-access-key-id"),
 				SecretAccessKey: options.Viper.GetString("r2-secret-access-key"),
@@ -39,6 +40,7 @@ func newApplySyncCommand(options Options) *cobra.Command {
 	flags.String("root", "", "verified candidate tree")
 	flags.String("bucket", "", "R2 bucket")
 	flags.String("prefix", "", "confined R2 object prefix")
+	flags.Bool("production-root", false, "publish to the bucket root while preserving reserved staging objects")
 	flags.String("endpoint", "", "R2 S3 endpoint")
 
 	return command

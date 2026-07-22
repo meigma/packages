@@ -47,7 +47,55 @@ func TestApplyUsesOrderedPlanAndVerifiesRemoteContent(t *testing.T) {
 	}, client.mutations)
 	assert.Equal(t, "new package", string(client.objects["_staging/apt/pool/fixture/new.deb"]))
 	assert.NotContains(t, client.objects, "_staging/apt/pool/fixture/old.deb")
-	assert.Equal(t, "no-store", client.cacheControl)
+	assert.Equal(t, "no-store", client.cacheControls["_staging/apt/pool/fixture/new.deb"])
+}
+
+func TestProductionRootPreservesStagingAndSetsImmutableCachePolicy(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeProductionCandidate(t, root)
+	client := &fakeS3Client{objects: map[string][]byte{
+		"_staging/keep":            []byte("staging state"),
+		"apt/pool/fixture/old.deb": []byte("old package"),
+	}}
+	request := validRequest(root)
+	request.Prefix = ""
+	request.ProductionRoot = true
+
+	result, err := applyWithClient(context.Background(), client, request)
+
+	require.NoError(t, err)
+	assert.True(t, result.Verified)
+	assert.Equal(t, "staging state", string(client.objects["_staging/keep"]))
+	assert.NotContains(t, client.mutations, "delete:_staging/keep")
+	assert.Equal(
+		t,
+		"public, max-age=31536000, immutable",
+		client.cacheControls["apt/pool/fixture/new.deb"],
+	)
+	assert.Equal(t, "no-store", client.cacheControls["apt/dists/stable/InRelease"])
+	assert.Equal(
+		t,
+		"public, max-age=31536000, immutable",
+		client.cacheControls["rpm/fixture/repodata/hash-primary.xml.gz"],
+	)
+	assert.Equal(t, "no-store", client.cacheControls["rpm/fixture/repodata/repomd.xml"])
+}
+
+func TestProductionRootRejectsAnIncompleteCandidateBeforeRemoteAccess(t *testing.T) {
+	t.Parallel()
+
+	request := validRequest(t.TempDir())
+	request.Prefix = ""
+	request.ProductionRoot = true
+	client := &fakeS3Client{objects: map[string][]byte{"production": []byte("untouched")}}
+
+	_, err := applyWithClient(context.Background(), client, request)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "production candidate requires meigma.asc")
+	assert.Empty(t, client.mutations)
 }
 
 func TestApplyReturnsVerifiedNoOp(t *testing.T) {
@@ -99,6 +147,20 @@ func TestRequestValidationRejectsUnsafeConfiguration(t *testing.T) {
 			mutate:  func(request *Request) { request.Endpoint = "http://r2.example" },
 			message: "endpoint must use https",
 		},
+		{
+			name: "empty prefix without production mode",
+			mutate: func(request *Request) {
+				request.Prefix = ""
+			},
+			message: "prefix is required unless production-root publication is enabled",
+		},
+		{
+			name: "production mode with a prefix",
+			mutate: func(request *Request) {
+				request.ProductionRoot = true
+			},
+			message: "production-root publication requires an empty prefix",
+		},
 	}
 
 	for _, test := range tests {
@@ -112,6 +174,23 @@ func TestRequestValidationRejectsUnsafeConfiguration(t *testing.T) {
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), test.message)
 		})
+	}
+}
+
+func writeProductionCandidate(t *testing.T, root string) {
+	t.Helper()
+
+	for relative, content := range map[string]string{
+		"meigma.asc":                 "public key",
+		"_state/manifest.json":       "state",
+		"apt/dists/stable/InRelease": "activation",
+		"apt/pool/fixture/new.deb":   "package",
+		"apt/dists/stable/fixture/binary-amd64/by-hash/SHA256/hash": "index",
+		"rpm/fixture/x86_64/new.rpm":                                "package",
+		"rpm/fixture/repodata/hash-primary.xml.gz":                  "metadata",
+		"rpm/fixture/repodata/repomd.xml":                           "activation",
+	} {
+		writeCandidate(t, root, relative, content)
 	}
 }
 
@@ -136,9 +215,9 @@ func validRequest(root string) Request {
 }
 
 type fakeS3Client struct {
-	objects      map[string][]byte
-	mutations    []string
-	cacheControl string
+	objects       map[string][]byte
+	mutations     []string
+	cacheControls map[string]string
 }
 
 func (client *fakeS3Client) ListObjectsV2(
@@ -181,7 +260,10 @@ func (client *fakeS3Client) PutObject(
 	key := aws.ToString(input.Key)
 	client.objects[key] = content
 	client.mutations = append(client.mutations, "put:"+key)
-	client.cacheControl = aws.ToString(input.CacheControl)
+	if client.cacheControls == nil {
+		client.cacheControls = make(map[string]string)
+	}
+	client.cacheControls[key] = aws.ToString(input.CacheControl)
 
 	return &s3.PutObjectOutput{}, nil
 }

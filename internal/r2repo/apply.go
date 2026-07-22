@@ -30,6 +30,8 @@ type Request struct {
 	Bucket string
 	// Prefix confines every remote object operation.
 	Prefix string
+	// ProductionRoot enables explicit bucket-root publication while preserving reserved staging objects.
+	ProductionRoot bool
 	// Endpoint is the account-specific R2 S3 endpoint.
 	Endpoint string
 	// AccessKeyID authenticates the S3 client.
@@ -88,6 +90,11 @@ func Apply(ctx context.Context, request Request) (Result, error) {
 }
 
 func applyWithClient(ctx context.Context, client s3Client, request Request) (Result, error) {
+	if request.ProductionRoot {
+		if err := validateProductionCandidate(request.Root); err != nil {
+			return Result{}, err
+		}
+	}
 	remoteRoot, err := os.MkdirTemp("", "meigma-packages-r2-before-")
 	if err != nil {
 		return Result{}, fmt.Errorf("create remote snapshot: %w", err)
@@ -133,7 +140,6 @@ func (request Request) validate() error {
 	fields := map[string]string{
 		"root":             request.Root,
 		"bucket":           request.Bucket,
-		"prefix":           request.Prefix,
 		"endpoint":         request.Endpoint,
 		"R2 access key ID": request.AccessKeyID,
 		"R2 secret key":    request.SecretAccessKey,
@@ -143,13 +149,53 @@ func (request Request) validate() error {
 			return fmt.Errorf("%s is required", field)
 		}
 	}
-	if strings.HasPrefix(request.Prefix, "/") || !strings.HasSuffix(request.Prefix, "/") ||
-		strings.HasPrefix(request.Prefix, "../") || strings.Contains(request.Prefix, "/../") ||
-		path.Clean(request.Prefix)+"/" != request.Prefix {
-		return errors.New("prefix must be a clean relative path ending in a slash")
+	if request.ProductionRoot {
+		if request.Prefix != "" {
+			return errors.New("production-root publication requires an empty prefix")
+		}
+	} else if strings.TrimSpace(request.Prefix) == "" {
+		return errors.New("prefix is required unless production-root publication is enabled")
+	}
+	if !request.ProductionRoot {
+		if strings.HasPrefix(request.Prefix, "/") || !strings.HasSuffix(request.Prefix, "/") ||
+			strings.HasPrefix(request.Prefix, "../") || strings.Contains(request.Prefix, "/../") ||
+			path.Clean(request.Prefix)+"/" != request.Prefix {
+			return errors.New("prefix must be a clean relative path ending in a slash")
+		}
 	}
 	if !strings.HasPrefix(request.Endpoint, "https://") {
 		return errors.New("endpoint must use https")
+	}
+
+	return nil
+}
+
+func validateProductionCandidate(root string) error {
+	required := []string{
+		"meigma.asc",
+		filepath.Join("_state", "manifest.json"),
+		filepath.Join("apt", "dists", "stable", "InRelease"),
+	}
+	for _, relative := range required {
+		info, err := os.Lstat(filepath.Join(root, relative))
+		if err != nil {
+			return fmt.Errorf("production candidate requires %s: %w", filepath.ToSlash(relative), err)
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("production candidate requires regular file %s", filepath.ToSlash(relative))
+		}
+	}
+	if _, err := os.Lstat(filepath.Join(root, "_staging")); err == nil {
+		return errors.New("production candidate must not contain the reserved _staging path")
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("inspect reserved production candidate path: %w", err)
+	}
+	repomd, err := filepath.Glob(filepath.Join(root, "rpm", "*", "repodata", "repomd.xml"))
+	if err != nil {
+		return fmt.Errorf("inspect production RPM metadata: %w", err)
+	}
+	if len(repomd) == 0 {
+		return errors.New("production candidate requires at least one RPM repomd.xml")
 	}
 
 	return nil
@@ -166,19 +212,8 @@ func hydrate(ctx context.Context, client s3Client, request Request, root string)
 		if err != nil {
 			return fmt.Errorf("list R2 prefix: %w", err)
 		}
-		objects := append([]typesObject(nil), objectKeys(output)...)
-		sort.Slice(objects, func(left, right int) bool { return objects[left].key < objects[right].key })
-		for _, object := range objects {
-			relative, err := relativeObjectPath(request.Prefix, object.key)
-			if err != nil {
-				return err
-			}
-			if relative == "" {
-				continue
-			}
-			if err := downloadObject(ctx, client, request.Bucket, object.key, root, relative); err != nil {
-				return err
-			}
+		if err := hydrateObjects(ctx, client, request, root, objectKeys(output)); err != nil {
+			return err
 		}
 		if !aws.ToBool(output.IsTruncated) {
 			return nil
@@ -188,6 +223,42 @@ func hydrate(ctx context.Context, client s3Client, request Request, root string)
 		}
 		continuationToken = output.NextContinuationToken
 	}
+}
+
+func hydrateObjects(
+	ctx context.Context,
+	client s3Client,
+	request Request,
+	root string,
+	objects []typesObject,
+) error {
+	objects = append([]typesObject(nil), objects...)
+	sort.Slice(objects, func(left, right int) bool { return objects[left].key < objects[right].key })
+	for _, object := range objects {
+		if !request.managesKey(object.key) {
+			continue
+		}
+		relative, err := relativeObjectPath(request.Prefix, object.key)
+		if err != nil {
+			return err
+		}
+		if relative == "" {
+			continue
+		}
+		if err := downloadObject(ctx, client, request.Bucket, object.key, root, relative); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (request Request) managesKey(key string) bool {
+	if !request.ProductionRoot {
+		return strings.HasPrefix(key, request.Prefix)
+	}
+
+	return key != "_staging" && !strings.HasPrefix(key, "_staging/")
 }
 
 type typesObject struct {
@@ -302,13 +373,34 @@ func putObject(
 		Bucket:       aws.String(request.Bucket),
 		Key:          aws.String(key),
 		Body:         file,
-		CacheControl: aws.String("no-store"),
+		CacheControl: aws.String(request.cacheControl(relative)),
 		Metadata:     map[string]string{"sha256": digest},
 	}); putErr != nil {
 		return fmt.Errorf("upload R2 object %s: %w", relative, putErr)
 	}
 
 	return nil
+}
+
+func (request Request) cacheControl(relative string) string {
+	if !request.ProductionRoot {
+		return "no-store"
+	}
+	if strings.HasSuffix(relative, ".deb") || strings.HasSuffix(relative, ".rpm") ||
+		strings.Contains(relative, "/by-hash/") || isImmutableRPMMetadata(relative) {
+		return "public, max-age=31536000, immutable"
+	}
+
+	return "no-store"
+}
+
+func isImmutableRPMMetadata(relative string) bool {
+	if !strings.Contains(relative, "/repodata/") {
+		return false
+	}
+	name := path.Base(relative)
+
+	return name != "repomd.xml" && name != "repomd.xml.asc"
 }
 
 func fileDigest(file *os.File) (string, error) {
