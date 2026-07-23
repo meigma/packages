@@ -94,3 +94,15 @@ _state/manifest.json discovery, the real consumer dispatch mechanism
 dispatches, NOT peter-evans action), and manual gh workflow run recipes.
 install.md generalized, operations.md onboarding no longer "deferred",
 mkdocs nav updated; strict-mode docs build passed. Session goal complete.
+
+## 2026-07-22 21:05 — Close
+Session closed. Merged PRs: #14 (211d286, scaffolding removal), #15 (fa6accf,
+publish path simplification, proven by staging run 29973794881), #16 (08a07dd,
+docs accuracy fixes + publishing guide). Local main fast-forwarded to 08a07dd;
+merged remote branches deleted; no worktrees left besides main and the
+journal. Handoff state: repo is Go CLI + ci.yml/publish.yml +
+publish.sh/lint-workflows.sh + docker/tools.Dockerfile + projects.yml + docs.
+Open threads recorded in SUMMARY.md: R2 credential automation (renew before
+2027-07-18), project onboarding (now documented), optional required reviewers
+on the production environment. TECH_NOTES.md rewritten to the post-cleanup
+contracts.

@@ -10,4 +10,4 @@
 | 006 | 2026-07-18 | Phase 5 consumer integration | in-progress | Familiarize with the original planning artifacts and begin the consumer integration phase. |
 | 007 | 2026-07-21 | First-release Linux packages and Phase 5 publication | complete | Shipped native DEB/RPM release assets and proved signed production repository publication through trusted consumer dispatch. |
 | 008 | 2026-07-22 | Generalize protected stable package publication | complete | Generalized and proved protected stable-release publication by shipping `incus-gh-runner v1.1.0` through verified staging and production. |
-| 009 | 2026-07-22 | New session | in-progress | Session opened; goal to be stated with the user's first request. |
+| 009 | 2026-07-22 | Strip delivery scaffolding and document publication | complete | Removed ~1,850 lines of phase scaffolding and ceremony, proved the simplified publish path in staging, and documented the registry and publish contracts. |
