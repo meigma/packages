@@ -19,8 +19,9 @@ func TestParseVersion(t *testing.T) {
 		errorSubstr string
 	}{
 		{name: "accepts a stable v-prefixed version", tag: "v12.3.40", want: [3]int{12, 3, 40}},
-		{name: "accepts stable build metadata", tag: "v12.3.40+build.2", want: [3]int{12, 3, 40}},
+		{name: "rejects build metadata", tag: "v12.3.40+build.2", errorSubstr: "stable v-prefixed semantic version"},
 		{name: "rejects a missing prefix", tag: "1.2.3", errorSubstr: "stable v-prefixed semantic version"},
+		{name: "rejects a repeated prefix", tag: "vv1.2.3", errorSubstr: "stable v-prefixed semantic version"},
 		{name: "rejects a prerelease", tag: "v1.2.3-rc.1", errorSubstr: "stable v-prefixed semantic version"},
 		{name: "rejects leading zeroes", tag: "v1.02.3", errorSubstr: "stable v-prefixed semantic version"},
 	}
@@ -41,6 +42,24 @@ func TestParseVersion(t *testing.T) {
 			assert.Equal(t, test.want, got)
 		})
 	}
+}
+
+func TestValidatePackageRecordRejectsTagVersionMismatch(t *testing.T) {
+	t.Parallel()
+
+	_, err := validatePackageRecord(
+		"v1.1.0",
+		formatDEB,
+		"incus-gh-runner_1.0.0_amd64.deb",
+		"incus-gh-runner",
+		"1.0.0",
+		"amd64",
+		"incus-gh-runner",
+		nil,
+	)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `version is "1.0.0", expected "1.1.0"`)
 }
 
 func TestReadChecksums(t *testing.T) {

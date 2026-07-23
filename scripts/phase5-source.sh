@@ -19,11 +19,26 @@ trap cleanup EXIT
 
 command -v gh >/dev/null
 
+project=${PROJECT:?PROJECT is required}
+tag=${TAG:?TAG is required}
+validation_result=$(mise exec -- go run ./cmd/meigma-packages validate-request \
+  --registry "$repo_root/projects.yml" \
+  --project "$project" \
+  --tag "$tag")
+validated_project=$(jq -er '.project' <<<"$validation_result")
+validated_tag=$(jq -er '.tag' <<<"$validation_result")
+package_name=$(jq -er '.package_name' <<<"$validation_result")
+package_version=$(jq -er '.package_version' <<<"$validation_result")
+if [[ "$validated_project" != "$project" || "$validated_tag" != "$tag" || "$tag" != "v$package_version" ]]; then
+  echo 'validated source identity does not match the requested project and tag' >&2
+  exit 2
+fi
+
 mise exec -- go run ./cmd/meigma-packages fetch-release \
   --registry "$repo_root/projects.yml" \
-  --project incus-gh-runner \
-  --tag v1.0.0 \
-  --output "$work_dir/releases/v1.0.0" > "$work_dir/fetch-result.json"
+  --project "$validated_project" \
+  --tag "$validated_tag" \
+  --output "$work_dir/releases/$validated_tag" > "$work_dir/fetch-result.json"
 
 docker_arch=$(docker info --format '{{.Architecture}}')
 case "$docker_arch" in
@@ -51,15 +66,20 @@ signing_key=$(tr -d '\n' < "$work_dir/signing-source/signing-fingerprint.txt")
 docker run --rm --volume "$work_dir:/work" "$tools_image" \
   /work/meigma-packages rebuild-local \
     --registry /work/projects.yml \
-    --project incus-gh-runner \
+    --project "$validated_project" \
     --releases /work/releases \
     --root /work/candidate \
     --gnupg-home /work/gnupg \
     --signing-key "$signing_key" \
     --base-url http://phase5-repo:8080 > "$work_dir/rebuild-result.json"
 
-docker run --rm --interactive --volume "$work_dir:/work" "$tools_image" python3 - <<'PY'
+docker run --rm --interactive \
+  --volume "$work_dir:/work" \
+  --env "PROJECT=$validated_project" \
+  --env "TAG=$validated_tag" \
+  "$tools_image" python3 - <<'PY'
 import json
+import os
 from pathlib import Path
 
 root = Path('/work')
@@ -67,7 +87,9 @@ fetch = json.loads((root / 'fetch-result.json').read_text())
 manifest = json.loads((root / 'candidate/_state/manifest.json').read_text())
 
 assert len(fetch['assets']) == 5
-assert manifest['selected_versions'] == ['v1.0.0']
+assert fetch['project'] == os.environ['PROJECT']
+assert fetch['tag'] == os.environ['TAG']
+assert manifest['selected_versions'] == [os.environ['TAG']]
 assert len(manifest['packages']) == 4
 assert {
     (package['format'], package['repository_architecture'])
@@ -81,11 +103,11 @@ assert {
 for architecture in ('amd64', 'arm64'):
     assert (
         root
-        / 'candidate/apt/dists/stable/incus-gh-runner'
+        / f"candidate/apt/dists/stable/{os.environ['PROJECT']}"
         / f'binary-{architecture}/Packages'
     ).is_file()
 for architecture in ('x86_64', 'aarch64'):
-    assert (root / f'candidate/rpm/incus-gh-runner/{architecture}').is_dir()
+    assert (root / f"candidate/rpm/{os.environ['PROJECT']}/{architecture}").is_dir()
 PY
 
 docker network create "$network_name" >/dev/null
@@ -97,7 +119,11 @@ docker run --detach --rm \
   "$tools_image" \
   python3 -m http.server 8080 --directory /srv >/dev/null
 
-docker run --rm --network "$network_name" "$debian_image" sh -ceu '
+docker run --rm --network "$network_name" \
+  --env "PROJECT=$validated_project" \
+  --env "PACKAGE_NAME=$package_name" \
+  --env "PACKAGE_VERSION=$package_version" \
+  "$debian_image" sh -ceu '
   export DEBIAN_FRONTEND=noninteractive
   apt-get update >/dev/null
   apt-get install -y --no-install-recommends ca-certificates curl >/dev/null
@@ -107,19 +133,23 @@ docker run --rm --network "$network_name" "$debian_image" sh -ceu '
 Types: deb
 URIs: http://phase5-repo:8080/apt
 Suites: stable
-Components: incus-gh-runner
+Components: $PROJECT
 Signed-By: /etc/apt/keyrings/meigma.asc
 EOF
   apt-get update -o Acquire::Languages=none >/dev/null
-  apt-get install -y --no-install-recommends incus-gh-runner >/dev/null
-  test "$(dpkg-query --show --showformat="\${Version}" incus-gh-runner)" = 1.0.0
+  apt-get install -y --no-install-recommends "$PACKAGE_NAME" >/dev/null
+  test "$(dpkg-query --show --showformat="\${Version}" "$PACKAGE_NAME")" = "$PACKAGE_VERSION"
 '
 
-docker run --rm --network "$network_name" "$fedora_image" sh -ceu '
-  curl -fsS http://phase5-repo:8080/rpm/incus-gh-runner/meigma.repo \
+docker run --rm --network "$network_name" \
+  --env "PROJECT=$validated_project" \
+  --env "PACKAGE_NAME=$package_name" \
+  --env "PACKAGE_VERSION=$package_version" \
+  "$fedora_image" sh -ceu '
+  curl -fsS "http://phase5-repo:8080/rpm/$PROJECT/meigma.repo" \
     -o /etc/yum.repos.d/meigma.repo
-  dnf -q --refresh install -y incus-gh-runner >/dev/null
-  test "$(rpm --query --queryformat "%{VERSION}" incus-gh-runner)" = 1.0.0
+  dnf -q --refresh install -y "$PACKAGE_NAME" >/dev/null
+  test "$(rpm --query --queryformat "%{VERSION}" "$PACKAGE_NAME")" = "$PACKAGE_VERSION"
 '
 
-echo 'Phase 5 real release discovery, rebuild, and clean DEB/RPM installs passed.'
+echo "Phase 5 $validated_project $validated_tag release discovery, rebuild, and clean DEB/RPM installs passed."

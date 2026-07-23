@@ -316,7 +316,12 @@ func TestValidateRequestCommandPassesResolvedInputAndPrintsResult(t *testing.T) 
 			assert.Equal(t, "phase3-fixture", project)
 			assert.Equal(t, "v2.1.0", tag)
 
-			return localrepo.RequestValidation{Project: project, Tag: tag}, nil
+			return localrepo.RequestValidation{
+				Project:        project,
+				PackageName:    "meigma-phase0",
+				Tag:            tag,
+				PackageVersion: "2.1.0",
+			}, nil
 		},
 	})
 	root.SetArgs([]string{
@@ -327,6 +332,11 @@ func TestValidateRequestCommandPassesResolvedInputAndPrintsResult(t *testing.T) 
 	})
 
 	require.NoError(t, root.ExecuteContext(context.Background()))
-	assert.JSONEq(t, `{"project":"phase3-fixture","tag":"v2.1.0"}`, stdout.String())
+	assert.JSONEq(t, `{
+		"project":"phase3-fixture",
+		"package_name":"meigma-phase0",
+		"tag":"v2.1.0",
+		"package_version":"2.1.0"
+	}`, stdout.String())
 	assert.Empty(t, stderr.String())
 }

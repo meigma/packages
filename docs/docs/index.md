@@ -14,7 +14,7 @@ The current codebase builds and verifies signed candidates, retains stable
 versions deterministically, verifies same-input no-ops, rebuilds from an empty
 root, and plans ordered remote changes with deletions last. The canonical
 registry discovers and verifies GitHub Release packages. Protected staging and
-production jobs publish the initial `incus-gh-runner` `v1.0.0` repository.
+production jobs publish registered exact stable `vX.Y.Z` releases.
 
 ## Developer quick start
 
@@ -34,8 +34,9 @@ run it from this repository.
   package from a clean Debian container.
 - `root:phase2-proof` proves retention, verified no-op behavior, empty-root
   rebuild equivalence, and deletion-safe sync planning.
-- `root:phase5-source-proof` verifies the real `incus-gh-runner` `v1.0.0`
-  release and performs clean DEB and RPM installs without publishing.
+- `root:phase5-source-proof` requires a registered project and exact stable tag
+  through `PROJECT` and `TAG`, then performs clean DEB and RPM installs without
+  publishing; `incus-gh-runner` `v1.1.0` is the current exercised example.
 - `root:phase5-publish` is the secret-bearing protected entrypoint used to
   publish, verify, repeat as a no-op, and install from staging or production.
 - `root:workflow-check` validates workflow syntax, embedded and standalone
@@ -44,7 +45,8 @@ run it from this repository.
 
 The publish workflow validates without secrets, then hands off to protected
 staging and production. Manual runs require explicit inputs and exact
-confirmation phrases. A trusted consumer dispatch supplies only a registered
-project and stable tag and cannot select deletion behavior. See [Install
+confirmation phrases derived from the validated project and tag. A trusted
+consumer dispatch must contain exactly `project` and `tag`; it cannot select
+deletion behavior, staging bypass, confirmation text, or R2 targeting. See [Install
 packages](install.md) for the public repository commands and [Operations
 boundary](operations.md) for the enforced scope and recovery behavior.

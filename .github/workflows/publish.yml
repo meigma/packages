@@ -13,7 +13,7 @@ on:
       tag:
         description: Stable v-prefixed release tag to validate
         required: true
-        default: v1.0.0
+        default: v1.1.0
         type: string
       apply_staging:
         description: Publish the verified release to the protected staging prefix
@@ -35,7 +35,7 @@ on:
         default: false
         type: boolean
       production_confirmation:
-        description: Type "publish incus-gh-runner v1.0.0 to production"
+        description: Type "publish <project> <tag> to production" using the selected values
         required: false
         type: string
 
@@ -56,7 +56,7 @@ jobs:
       EMPTY_STAGING: ${{ github.event_name == 'workflow_dispatch' && inputs.empty_staging }}
       EMPTY_STAGING_CONFIRMATION: ${{ github.event_name == 'workflow_dispatch' && inputs.empty_staging_confirmation || '' }}
       APPLY_PRODUCTION: ${{ github.event_name == 'repository_dispatch' || inputs.apply_production }}
-      PRODUCTION_CONFIRMATION: ${{ github.event_name == 'repository_dispatch' && 'publish incus-gh-runner v1.0.0 to production' || inputs.production_confirmation }}
+      PRODUCTION_CONFIRMATION: ${{ github.event_name == 'repository_dispatch' && format('publish {0} {1} to production', github.event.client_payload.project, github.event.client_payload.tag) || inputs.production_confirmation }}
       MEIGMA_PACKAGES_GITHUB_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout
@@ -71,6 +71,10 @@ jobs:
           version: 2026.6.14
           cache: true
 
+      - name: Validate trusted dispatch payload shape
+        if: ${{ github.event_name == 'repository_dispatch' }}
+        run: python3 scripts/validate_publish_event.py "$GITHUB_EVENT_PATH"
+
       - name: Validate request
         run: >-
           go run ./cmd/meigma-packages validate-request
@@ -80,13 +84,14 @@ jobs:
 
       - name: Validate protected publication selections
         run: |
+          expected_confirmation="publish $PROJECT $TAG to production"
           if [[ "$EMPTY_STAGING" == true ]]; then
             [[ "$APPLY_STAGING" == true ]]
             [[ "$EMPTY_STAGING_CONFIRMATION" == 'empty _staging only' ]]
           fi
           if [[ "$APPLY_PRODUCTION" == true ]]; then
             [[ "$APPLY_STAGING" == true ]]
-            [[ "$PRODUCTION_CONFIRMATION" == 'publish incus-gh-runner v1.0.0 to production' ]]
+            [[ "$PRODUCTION_CONFIRMATION" == "$expected_confirmation" ]]
           fi
 
       - name: Prove the real release source path
@@ -164,7 +169,7 @@ jobs:
       PUBLICATION_TARGET: production
       PROJECT: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.project || inputs.project }}
       TAG: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.tag || inputs.tag }}
-      PRODUCTION_CONFIRMATION: ${{ github.event_name == 'repository_dispatch' && 'publish incus-gh-runner v1.0.0 to production' || inputs.production_confirmation }}
+      PRODUCTION_CONFIRMATION: ${{ github.event_name == 'repository_dispatch' && format('publish {0} {1} to production', github.event.client_payload.project, github.event.client_payload.tag) || inputs.production_confirmation }}
       GPG_SIGNING_SUBKEY: ${{ secrets.GPG_SIGNING_SUBKEY }}
       GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       GPG_PRIMARY_FINGERPRINT: ${{ vars.GPG_PRIMARY_FINGERPRINT }}

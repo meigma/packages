@@ -13,6 +13,7 @@ IMAGE_DIGEST = re.compile(r"@sha256:[0-9a-f]{64}$")
 IMAGE_ASSIGNMENT = re.compile(r"^[a-z0-9_]+_image=['\"]?([^'\"\s]+)")
 PRIVILEGED_WORKFLOWS = {"publish.yml"}
 PUBLISH_DISPATCH_PAYLOAD_FIELDS = {"project", "tag"}
+DISPATCH_CONFIRMATION = "${{ github.event_name == 'repository_dispatch' && format('publish {0} {1} to production', github.event.client_payload.project, github.event.client_payload.tag) || inputs.production_confirmation }}"
 
 
 def validate_publish_dispatch_contract(text: str) -> list[str]:
@@ -49,6 +50,26 @@ def validate_publish_dispatch_contract(text: str) -> list[str]:
             "EMPTY_STAGING: ${{ github.event_name == 'workflow_dispatch' && inputs.empty_staging }}",
             2,
         ),
+        (
+            "consumer dispatch confirmation must be derived from project and tag",
+            f"PRODUCTION_CONFIRMATION: {DISPATCH_CONFIRMATION}",
+            2,
+        ),
+        (
+            "consumer dispatch payload shape must be validated before publication",
+            'run: python3 scripts/validate_publish_event.py "$GITHUB_EVENT_PATH"',
+            1,
+        ),
+        (
+            "manual production confirmation must be derived from project and tag",
+            'expected_confirmation="publish $PROJECT $TAG to production"',
+            1,
+        ),
+        (
+            "staging must use only its protected R2 prefix variable",
+            "R2_PREFIX: ${{ vars.R2_PREFIX }}",
+            1,
+        ),
     )
     for message, fragment, count in required_fragments:
         if text.count(fragment) != count:
@@ -61,6 +82,52 @@ def validate_publish_dispatch_contract(text: str) -> list[str]:
         violations.append(
             "repository dispatch payload must be confined to project and tag"
         )
+
+    return violations
+
+
+def validate_publish_script_contract(text: str) -> list[str]:
+    """Return violations in the protected publisher's local fail-closed guards."""
+    violations: list[str] = []
+    required_fragments = (
+        (
+            "protected publisher must independently validate project and tag",
+            "go run ./cmd/meigma-packages validate-request",
+        ),
+        (
+            "package version must be derived from exactly one validated leading v",
+            '"$TAG" != "v$package_version"',
+        ),
+        (
+            "production confirmation must be derived from validated project and tag",
+            'production_confirmation="publish $validated_project $validated_tag to production"',
+        ),
+        (
+            "staging publication must remain isolated to _staging/",
+            '"${R2_PREFIX:-}" != \'_staging/\'',
+        ),
+        (
+            "production publication must require an empty R2 prefix",
+            '[[ -n "${R2_PREFIX:-}" ]]',
+        ),
+        (
+            "production publication must use the protected root mode",
+            "apply_arguments+=(--production-root)",
+        ),
+        (
+            "APT clean installs must assert the validated package version",
+            'dpkg-query --show --showformat="\\${Version}" "$PACKAGE_NAME"',
+        ),
+        (
+            "RPM clean installs must assert the validated package version",
+            'rpm --query --queryformat "%{VERSION}" "$PACKAGE_NAME"',
+        ),
+    )
+    for message, fragment in required_fragments:
+        if fragment not in text:
+            violations.append(message)
+    if "incus-gh-runner" in text or "v1.0.0" in text:
+        violations.append("protected publisher must not pin a project or release")
 
     return violations
 
@@ -112,8 +179,8 @@ def validate_workflow(path: Path) -> list[str]:
                 production_block,
             ):
                 violations.append("production publication requires serialized concurrency")
-            if "publish incus-gh-runner v1.0.0 to production" not in text:
-                violations.append("production publication requires an exact confirmation phrase")
+            if '[[ "$PRODUCTION_CONFIRMATION" == "$expected_confirmation" ]]' not in text:
+                violations.append("production publication requires the derived exact confirmation phrase")
             if "R2_PREFIX: ''" not in production_block:
                 violations.append("production publication requires an explicit empty R2 prefix")
             if not re.search(
@@ -182,6 +249,12 @@ def main() -> int:
         for violation in validate_workflow(path)
     ]
     violations.extend(validate_container_images())
+    violations.extend(
+        f"scripts/phase5-publish.sh: {violation}"
+        for violation in validate_publish_script_contract(
+            Path("scripts/phase5-publish.sh").read_text(encoding="utf-8")
+        )
+    )
     if violations:
         print("\n".join(violations), file=sys.stderr)
         return 1
