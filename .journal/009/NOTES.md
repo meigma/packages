@@ -80,3 +80,17 @@ projects.yml onboarding schema undocumented, no doc on how to trigger the
 Publish workflow (manual inputs or dispatch payload shape), and the
 package_name -> APT component / RPM path convention unstated so install docs
 only work for the hardcoded example. Reported to user; fixes not yet applied.
+
+## 2026-07-22 20:45 — Docs gaps closed, PR 16 merged
+Wrote the full docs set from the verification findings; PR #16 merged as
+08a07dd. README fixes: fixture wording in the opening paragraph (extra stale
+claim found beyond the workflow's findings), complete mise tool list, and
+MEIGMA_PACKAGES_* documented as the live env prefix. New
+docs/docs/publishing.md documents the projects.yml contract field-by-field
+(sourced from registry.go validation), upstream release requirements, the
+project-key -> APT component / rpm/<project>/ layout convention with
+_state/manifest.json discovery, the real consumer dispatch mechanism
+(verified against incus-gh-runner packages.yml: app token + gh api
+dispatches, NOT peter-evans action), and manual gh workflow run recipes.
+install.md generalized, operations.md onboarding no longer "deferred",
+mkdocs nav updated; strict-mode docs build passed. Session goal complete.
