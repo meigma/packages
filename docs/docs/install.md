@@ -5,8 +5,15 @@ description: Add the signed Meigma APT or RPM repository and install incus-gh-ru
 
 # Install Meigma packages
 
-Use the Meigma package repository to install `incus-gh-runner` and receive
+Use the Meigma package repository to install Meigma software and receive
 updates through your operating system's package manager.
+
+The examples below install `incus-gh-runner`. For any other published
+project, substitute its name in the same places: each project is its own APT
+component (the `Components:` line) and its own RPM path
+(`rpm/<project>/meigma.repo`), and its packages install by the project's
+package name. The full list of published projects, versions, and packages is
+at [`https://pkgs.meigma.dev/_state/manifest.json`](https://pkgs.meigma.dev/_state/manifest.json).
 
 ## Verify the signing key
 

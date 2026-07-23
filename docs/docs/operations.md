@@ -69,5 +69,8 @@ subkey, never the primary signing key.
 
 The following remains deferred beyond the generalized production slice:
 
-- automated credential renewal or an OIDC broker;
-- onboarding additional projects through the existing registry contract.
+- automated credential renewal or an OIDC broker.
+
+Onboarding additional projects is routine operation; see
+[Publish a release](publishing.md) for the registry contract and workflow
+inputs.
