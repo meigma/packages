@@ -30,18 +30,13 @@ run it from this repository.
 
 ## Current proof surface
 
-- `root:phase1-proof` builds a signed APT/RPM candidate and installs its fixture
-  package from a clean Debian container.
-- `root:phase2-proof` proves retention, verified no-op behavior, empty-root
-  rebuild equivalence, and deletion-safe sync planning.
 - `root:phase5-source-proof` requires a registered project and exact stable tag
   through `PROJECT` and `TAG`, then performs clean DEB and RPM installs without
   publishing; `incus-gh-runner` `v1.1.0` is the current exercised example.
 - `root:phase5-publish` is the secret-bearing protected entrypoint used to
   publish, verify, repeat as a no-op, and install from staging or production.
-- `root:workflow-check` validates workflow syntax, embedded and standalone
-  shell, full-SHA action pins, read-only permissions, and the Phase 3
-  no-secrets boundary.
+- `root:workflow-check` validates workflow syntax and embedded and standalone
+  shell with pinned `actionlint` and ShellCheck.
 
 The publish workflow validates without secrets, then hands off to protected
 staging and production. Manual runs require explicit inputs and exact
