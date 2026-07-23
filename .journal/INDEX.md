@@ -9,4 +9,4 @@
 | 005 | 2026-07-18 | Phase 4 staging publication rehearsal | complete | Provisioned and proved protected R2 staging publication, recovery, signing, credentials, and cache boundaries, then merged PR #9. |
 | 006 | 2026-07-18 | Phase 5 consumer integration | in-progress | Familiarize with the original planning artifacts and begin the consumer integration phase. |
 | 007 | 2026-07-21 | First-release Linux packages and Phase 5 publication | complete | Shipped native DEB/RPM release assets and proved signed production repository publication through trusted consumer dispatch. |
-| 008 | 2026-07-22 | Generalize protected stable package publication | in-progress | Generalize the verified protected publisher beyond the initial release while preserving all staging and production trust boundaries. |
+| 008 | 2026-07-22 | Generalize protected stable package publication | complete | Generalized and proved protected stable-release publication by shipping `incus-gh-runner v1.1.0` through verified staging and production. |
