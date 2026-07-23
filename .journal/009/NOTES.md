@@ -67,3 +67,16 @@ publish.yml; spikes/ and testdata/ gone; ~1,850 lines removed across PRs
 #14/#15. Remaining candidates (not done): remove stale feat/phase4-staging
 from the staging environment's deployment branch policy; trivial help-text
 assertions in internal/cli/root_test.go left as-is.
+
+## 2026-07-22 20:15 — Docs verification workflow complete
+Ran a 7-agent workflow (4 sonnet doc reviewers, opus verification + helpfulness
+pass) over README.md and docs/docs/{index,install,operations}.md at fa6accf.
+Two confirmed accuracy issues, both minor: (1) README's mise.toml tool list
+omits actionlint/shellcheck (the tools workflow-check depends on); (2) README
+calls MEIGMA_PACKAGES_* "reserved for future configuration" but it is the live
+env prefix consumed by fetch-release/apply-sync and publish.yml. No leftover
+references to removed scaffolding were found. Three helpfulness gaps flagged:
+projects.yml onboarding schema undocumented, no doc on how to trigger the
+Publish workflow (manual inputs or dispatch payload shape), and the
+package_name -> APT component / RPM path convention unstated so install docs
+only work for the hardcoded example. Reported to user; fixes not yet applied.
