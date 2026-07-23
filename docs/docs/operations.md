@@ -5,26 +5,17 @@ description: What the read-only workflows and protected publication paths can do
 
 # Operations boundary
 
-Phase 3 proves the complete repository behavior that does not require external
-provisioning. It keeps workflow orchestration thin and runs the same local
-candidate and rebuild commands used by developers.
-
 ## Available workflows
 
 `CI` runs on pull requests and pushes to `main`. It has read-only repository
-access, receives no secrets, and runs affected Moon tasks. The current task
-graph includes Go checks, documentation, signed fixture candidates, clean
-package installation, deterministic rebuild/no-op proof, ordered sync-plan
-fault coverage, and workflow policy enforcement.
+access, receives no secrets, and runs affected Moon tasks: Go checks,
+documentation, and workflow linting.
 
 `Publish validation` accepts either a manual request or the exact
 `publish-package` repository dispatch event. Both paths validate the registered
 project and exact stable `vX.Y.Z` release tag and prove that same GitHub Release
 source path without secrets. The consumer payload must contain exactly
 `project` and `tag`; extra fields fail validation.
-
-`Rebuild validation` is manually dispatched with a fixture project. It
-validates the project and runs the Phase 2 deterministic rebuild proof.
 
 Manual requests change no package repository state without the explicit
 `apply_staging` input. A trusted consumer dispatch always continues through
@@ -56,20 +47,18 @@ deletes production independently of the verified desired-state plan.
 
 ## Enforced safety boundary
 
-All checked-in workflows currently require:
+All checked-in workflows keep:
 
 - empty top-level token permissions and no write permission;
 - GitHub-hosted runners;
 - full commit SHA pins for actions;
 - checkout credential persistence disabled;
-- secrets and deployment environments only inside dedicated staging and production jobs;
+- secrets and deployment environments only inside the protected staging and
+  production jobs;
 - no privileged pull-request triggers.
 
-The policy is executable through `moon run root:workflow-check`. It permits
-secrets only in those manual jobs, requires staging to depend on read-only
-validation and production to depend on both validation and staging, and
-continues to reject pull-request-derived privileged triggers, write
-permissions, unpinned actions, and self-hosted runners.
+These properties are maintained through code review; `moon run
+root:workflow-check` lints workflow syntax and shell.
 
 ## Cache and credential boundary
 

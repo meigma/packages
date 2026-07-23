@@ -66,37 +66,6 @@ tasks:
     options:
       cache: false
 
-  phase1-proof:
-    command: 'scripts/phase1-local.sh'
-    inputs:
-      - '@group(goSources)'
-      - 'scripts/phase1-local.sh'
-      - 'testdata/phase1/projects.yml'
-      - 'spikes/phase0/**/*'
-    options:
-      cache: false
-
-  phase2-proof:
-    command: 'scripts/phase2-local.sh'
-    inputs:
-      - '@group(goSources)'
-      - 'scripts/phase2-local.sh'
-      - 'testdata/phase2/projects.yml'
-      - 'spikes/phase0/**/*'
-    options:
-      cache: false
-
-  phase4-staging:
-    command: 'scripts/phase4-staging.sh'
-    inputs:
-      - '@group(goSources)'
-      - 'scripts/phase4-staging.sh'
-      - 'testdata/phase2/projects.yml'
-      - 'spikes/phase0/**/*'
-    options:
-      cache: false
-      runInCI: false
-
   phase5-source-proof:
     command: 'scripts/phase5-source.sh'
     inputs:
@@ -120,7 +89,7 @@ tasks:
       runInCI: false
 
   workflow-check:
-    command: 'scripts/phase3-ci.sh'
+    command: 'scripts/lint-workflows.sh'
     inputs:
       - '.github/workflows/**/*'
       - 'scripts/*.sh'

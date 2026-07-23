@@ -45,10 +45,8 @@ moon run root:check
 
 The aggregate `root:check` task also builds the local documentation. CI runs
 the affected equivalent with `moon ci --summary minimal`. Workflow validation
-uses pinned `actionlint` and ShellCheck versions plus a repository policy that
-keeps routine jobs read-only, GitHub-hosted, and full-SHA pinned. Secrets and
-deployment environments are allowed only in dedicated manual staging and
-production jobs.
+uses pinned `actionlint` and ShellCheck versions. Secrets and deployment
+environments are allowed only in the protected staging and production jobs.
 
 The CLI scaffold can be exercised directly:
 
@@ -56,38 +54,6 @@ The CLI scaffold can be exercised directly:
 go run ./cmd/meigma-packages --help
 go run ./cmd/meigma-packages --version
 ```
-
-## Local candidate proof
-
-The Phase 1 vertical slice builds fixture release assets into a signed and
-verified APT/RPM candidate tree, then installs the fixture from a clean Debian
-container:
-
-```sh
-moon run root:phase1-proof
-```
-
-The proof uses only Docker and the pinned local toolchain. It creates a
-throwaway signing key and temporary output, invokes the durable
-`meigma-packages build-local` command, and removes all generated state when it
-finishes. It does not access GitHub Releases, R2, or production credentials.
-
-## Deterministic rebuild proof
-
-The Phase 2 slice adds fixture release-set validation, semantic-version
-retention, checksum and package-metadata inspection, logical state manifests,
-verified same-input no-ops, and ordered filesystem sync planning:
-
-```sh
-moon run root:phase2-proof
-```
-
-The proof builds three fixture releases, retains the newest two, verifies that
-the same input is a no-op, rebuilds the same logical tree from an empty root,
-and confirms that every planned deletion follows content and metadata
-activation. This fixture proof remains local and secrets-free; the separate
-Phase 5 proof covers GitHub Release discovery. Production R2 transport and
-signing material remain later phases.
 
 ## Real release source proof
 

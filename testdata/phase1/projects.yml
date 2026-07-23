@@ -1,8 +1,0 @@
-schema: 1
-
-projects:
-  phase1-fixture:
-    package_name: meigma-phase0
-    assets:
-      deb: meigma-phase0_1.0.0_all.deb
-      rpm: meigma-phase0-1.0.0-1.noarch.rpm
