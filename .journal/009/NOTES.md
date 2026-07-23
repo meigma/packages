@@ -36,3 +36,20 @@ hardcoding class that blocked releases; (5) phase4-staging.sh and rebuild.yml
 superseded by the phase5 path. Real value: Go CLI + unit tests, protected
 environments, validate-request, apply-sync verify/no-op, signing, clean-install
 smoke. Assessment delivered; awaiting go-ahead before deleting anything.
+
+## 2026-07-22 19:35 — PR 14 merged, PR 15 open
+PR #14 (chore: remove phase proofs and workflow policy checker) merged as
+211d286: deleted check_workflow_policy, phase1/2/4 scripts, testdata,
+rebuild.yml, spike extras; phase3-ci.sh became lint-workflows.sh (actionlint +
+shellcheck only). CI dropped from ~65s to ~32s. PR #15 opened: renames
+phase5-publish.sh to publish.sh (env-driven, no hardcoded URLs/prefixes),
+deletes phase5-source.sh (had hardcoded 5-asset/4-package asserts),
+validate_publish_event.py, spikes/ entirely (Dockerfile.tools →
+docker/tools.Dockerfile, TOOLS_UID arg, shellcheck removed); publish.yml
+renamed "Publish", inputs cut to project/tag/apply_staging/apply_production,
+confirmation phrases and empty_staging dropped. Decision: neither environment
+has required reviewers (only branch policies), so the apply_production
+checkbox (default false) remains the manual speed bump; trusted dispatch
+unchanged. Plan after merge: staging-only dispatch of incus-gh-runner v1.1.0
+from main to prove the reworked path. Also noticed stale feat/phase4-staging
+branch allowed in staging environment deployment policy — candidate cleanup.
