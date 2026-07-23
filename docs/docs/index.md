@@ -36,5 +36,7 @@ run `scripts/publish.sh` to rebuild, sign, apply, verify, and clean-install
 the release. Manual runs select `apply_staging` and `apply_production`
 explicitly; a trusted consumer dispatch carrying `project` and `tag` always
 publishes through staging to production. See [Install packages](install.md)
-for the public repository commands and [Operations boundary](operations.md)
-for the enforced scope and recovery behavior.
+for the public repository commands, [Publish a release](publishing.md) for
+the registry contract and how to run a publish, and
+[Operations boundary](operations.md) for the enforced scope and recovery
+behavior.

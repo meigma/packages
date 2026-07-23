@@ -1,7 +1,7 @@
 # meigma/packages
 
 `meigma/packages` builds and publishes the signed APT and RPM repositories used
-by Meigma projects. It builds verified candidates from fixture release sets,
+by Meigma projects. It builds verified candidates from GitHub Release assets,
 applies deterministic retention, proves rebuild/no-op behavior, and executes
 deletion-safe sync plans. The protected publication path signs with the CI
 signing subkey, publishes a verified GitHub Release to either the isolated R2
@@ -26,7 +26,8 @@ Install [mise](https://mise.jdx.dev), then provision the pinned toolchain:
 mise install
 ```
 
-`mise.toml` selects Go, Moon, Python, uv, and golangci-lint. `mise.lock`
+`mise.toml` selects Go, Moon, Python, uv, golangci-lint, actionlint, and
+ShellCheck. `mise.lock`
 records their per-platform URLs and checksums, and locked mode fails closed when
 a selected platform has no resolved artifact.
 
@@ -56,8 +57,11 @@ go run ./cmd/meigma-packages --version
 ```
 
 The entrypoint under `cmd/meigma-packages` remains thin. Cobra/Viper command
-construction lives under `internal/cli`, with `MEIGMA_PACKAGES_*` reserved as
-the environment-variable prefix for future configuration.
+construction lives under `internal/cli`. `MEIGMA_PACKAGES_*` is the live
+environment-variable prefix: `MEIGMA_PACKAGES_GITHUB_TOKEN` authenticates
+`fetch-release`, and `MEIGMA_PACKAGES_R2_ACCESS_KEY_ID`,
+`MEIGMA_PACKAGES_R2_SECRET_ACCESS_KEY`, and
+`MEIGMA_PACKAGES_R2_SESSION_TOKEN` credential `apply-sync`.
 
 ## Publication
 
@@ -79,8 +83,9 @@ select `apply_staging` and `apply_production` explicitly; production only runs
 after staging succeeds. Immutable package and content-addressed metadata
 objects receive a one-year immutable cache policy; activation metadata, state,
 keys, and repo configuration remain `no-store`. Production deletion is not an
-operator mode. See the [operations boundary](docs/docs/operations.md) before
-dispatching it.
+operator mode. See [Publish a release](docs/docs/publishing.md) for the
+registry contract and workflow inputs, and the
+[operations boundary](docs/docs/operations.md) before dispatching it.
 
 ## Documentation
 
