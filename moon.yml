@@ -66,35 +66,11 @@ tasks:
     options:
       cache: false
 
-  phase5-source-proof:
-    command: 'scripts/phase5-source.sh'
-    inputs:
-      - '@group(goSources)'
-      - 'projects.yml'
-      - 'scripts/phase5-source.sh'
-      - 'spikes/phase0/**/*'
-    options:
-      cache: false
-      runInCI: false
-
-  phase5-publish:
-    command: 'scripts/phase5-publish.sh'
-    inputs:
-      - '@group(goSources)'
-      - 'projects.yml'
-      - 'scripts/phase5-publish.sh'
-      - 'spikes/phase0/**/*'
-    options:
-      cache: false
-      runInCI: false
-
   workflow-check:
     command: 'scripts/lint-workflows.sh'
     inputs:
       - '.github/workflows/**/*'
       - 'scripts/*.sh'
-      - 'scripts/*.py'
-      - 'spikes/phase0/*.sh'
       - 'mise.toml'
       - 'mise.lock'
     options:

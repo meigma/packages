@@ -1,4 +1,4 @@
-name: Publish validation
+name: Publish
 
 on:
   repository_dispatch:
@@ -8,56 +8,34 @@ on:
       project:
         description: Registered project to publish
         required: true
-        default: incus-gh-runner
         type: string
       tag:
-        description: Stable v-prefixed release tag to validate
+        description: Stable v-prefixed release tag to publish
         required: true
-        default: v1.1.0
         type: string
       apply_staging:
         description: Publish the verified release to the protected staging prefix
         required: true
         default: false
         type: boolean
-      empty_staging:
-        description: Empty only _staging/ before rebuilding it from the release
-        required: true
-        default: false
-        type: boolean
-      empty_staging_confirmation:
-        description: Type "empty _staging only" when empty_staging is selected
-        required: false
-        type: string
       apply_production:
         description: Publish to the protected production root after staging succeeds
         required: true
         default: false
         type: boolean
-      production_confirmation:
-        description: Type "publish <project> <tag> to production" using the selected values
-        required: false
-        type: string
 
 permissions: {}
 
 jobs:
   validate:
-    name: Validate publish path without secrets
+    name: Validate the publish request without secrets
     runs-on: ubuntu-latest
     permissions:
-      attestations: read
       contents: read
     env:
       GOTOOLCHAIN: local
       PROJECT: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.project || inputs.project }}
       TAG: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.tag || inputs.tag }}
-      APPLY_STAGING: ${{ github.event_name == 'repository_dispatch' || inputs.apply_staging }}
-      EMPTY_STAGING: ${{ github.event_name == 'workflow_dispatch' && inputs.empty_staging }}
-      EMPTY_STAGING_CONFIRMATION: ${{ github.event_name == 'workflow_dispatch' && inputs.empty_staging_confirmation || '' }}
-      APPLY_PRODUCTION: ${{ github.event_name == 'repository_dispatch' || inputs.apply_production }}
-      PRODUCTION_CONFIRMATION: ${{ github.event_name == 'repository_dispatch' && format('publish {0} {1} to production', github.event.client_payload.project, github.event.client_payload.tag) || inputs.production_confirmation }}
-      MEIGMA_PACKAGES_GITHUB_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -71,31 +49,12 @@ jobs:
           version: 2026.6.14
           cache: true
 
-      - name: Validate trusted dispatch payload shape
-        if: ${{ github.event_name == 'repository_dispatch' }}
-        run: python3 scripts/validate_publish_event.py "$GITHUB_EVENT_PATH"
-
       - name: Validate request
         run: >-
           go run ./cmd/meigma-packages validate-request
           --registry projects.yml
           --project "$PROJECT"
           --tag "$TAG"
-
-      - name: Validate protected publication selections
-        run: |
-          expected_confirmation="publish $PROJECT $TAG to production"
-          if [[ "$EMPTY_STAGING" == true ]]; then
-            [[ "$APPLY_STAGING" == true ]]
-            [[ "$EMPTY_STAGING_CONFIRMATION" == 'empty _staging only' ]]
-          fi
-          if [[ "$APPLY_PRODUCTION" == true ]]; then
-            [[ "$APPLY_STAGING" == true ]]
-            [[ "$PRODUCTION_CONFIRMATION" == "$expected_confirmation" ]]
-          fi
-
-      - name: Prove the real release source path
-        run: scripts/phase5-source.sh
 
   staging:
     name: Publish and verify the protected staging prefix
@@ -117,8 +76,6 @@ jobs:
       PUBLICATION_TARGET: staging
       PROJECT: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.project || inputs.project }}
       TAG: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.tag || inputs.tag }}
-      EMPTY_STAGING: ${{ github.event_name == 'workflow_dispatch' && inputs.empty_staging }}
-      EMPTY_STAGING_CONFIRMATION: ${{ github.event_name == 'workflow_dispatch' && inputs.empty_staging_confirmation || '' }}
       GPG_SIGNING_SUBKEY: ${{ secrets.GPG_SIGNING_SUBKEY }}
       GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       GPG_PRIMARY_FINGERPRINT: ${{ vars.GPG_PRIMARY_FINGERPRINT }}
@@ -144,8 +101,8 @@ jobs:
           version: 2026.6.14
           cache: true
 
-      - name: Publish and verify the real release in staging
-        run: scripts/phase5-publish.sh
+      - name: Publish and verify the release in staging
+        run: scripts/publish.sh
 
   production:
     name: Publish and verify the protected production root
@@ -169,7 +126,6 @@ jobs:
       PUBLICATION_TARGET: production
       PROJECT: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.project || inputs.project }}
       TAG: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.tag || inputs.tag }}
-      PRODUCTION_CONFIRMATION: ${{ github.event_name == 'repository_dispatch' && format('publish {0} {1} to production', github.event.client_payload.project, github.event.client_payload.tag) || inputs.production_confirmation }}
       GPG_SIGNING_SUBKEY: ${{ secrets.GPG_SIGNING_SUBKEY }}
       GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       GPG_PRIMARY_FINGERPRINT: ${{ vars.GPG_PRIMARY_FINGERPRINT }}
@@ -195,5 +151,5 @@ jobs:
           version: 2026.6.14
           cache: true
 
-      - name: Publish and verify the real release in production
-        run: scripts/phase5-publish.sh
+      - name: Publish and verify the release in production
+        run: scripts/publish.sh

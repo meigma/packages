@@ -55,59 +55,32 @@ go run ./cmd/meigma-packages --help
 go run ./cmd/meigma-packages --version
 ```
 
-## Real release source proof
-
-The opt-in Phase 5 proof downloads the selected registered project's exact
-stable release from GitHub, verifies GitHub's asset digests and the pinned
-release-workflow attestations, rebuilds the signed multi-architecture
-repositories, and performs clean DEB and RPM installs on the current Docker
-architecture:
-
-```sh
-PROJECT=incus-gh-runner TAG=v1.1.0 moon run root:phase5-source-proof
-```
-
-`PROJECT` and `TAG` are required, so another registered exact stable release
-uses the same proof without changing the script. The proof derives the expected
-package version by removing exactly one leading `v` from the validated tag and
-requires both package formats to report it.
-
-The source contract is checked into [`projects.yml`](projects.yml). The proof
-uses GitHub and Docker but no publishing or production credentials. It does not
-write to R2.
-
 The entrypoint under `cmd/meigma-packages` remains thin. Cobra/Viper command
 construction lives under `internal/cli`, with `MEIGMA_PACKAGES_*` reserved as
 the environment-variable prefix for future configuration.
 
-## Protected publication
+## Publication
 
-The `Publish validation` and manual `Rebuild validation` workflows exercise the
-same fixture-backed proofs on GitHub-hosted runners. They use
-`meigma-packages validate-request` to reject unknown projects, unsafe project
-names, and invalid stable release tags before invoking the local proof.
-Accepted publish tags have exactly the `vX.Y.Z` shape; prereleases, build
-metadata, missing or repeated prefixes, and leading-zero variants fail closed.
+The `Publish` workflow runs on a trusted `publish-package` repository dispatch
+from a registered consumer, or manually with a registered `project` and exact
+stable `vX.Y.Z` `tag`. An unprivileged job validates the request against
+[`projects.yml`](projects.yml) first; prereleases, build metadata, missing or
+repeated prefixes, and leading-zero variants fail closed.
 
-`Publish validation` also accepts the exact `publish-package` repository
-dispatch event from a trusted consumer. Its payload is restricted to `project`
-and `tag`; a valid dispatch always enters protected staging and production and
-cannot request staging deletion.
+The protected `staging` and `production` jobs then run `scripts/publish.sh`:
+download the release from GitHub, verify asset digests and pinned
+release-workflow attestations, rebuild the signed multi-architecture APT/RPM
+tree, apply the ordered sync plan to R2, verify the remote bytes, repeat the
+publish as a no-op, and install the package from the public URL on clean
+Debian, Ubuntu, and Fedora containers.
 
-Both validation jobs are unprivileged. `Publish validation` can additionally
-run the protected staging job with `apply_staging=true`. Selecting
-`empty_staging=true` requires the exact `empty _staging only` confirmation and
-rehearses recovery by emptying and rebuilding that prefix only.
-
-Production is a second protected job that can run only after staging succeeds.
-It requires `apply_production=true` and the exact confirmation derived from the
-validated selection: `publish <project> <tag> to production`. Trusted dispatch
-synthesizes that phrase internally; manual runs must supply it exactly. Root publication
-preserves every `_staging/` object and rejects incomplete candidates before
-remote access. Immutable package and content-addressed metadata objects receive
-a one-year immutable cache policy; activation metadata, state, keys, and repo
-configuration remain `no-store`. Production deletion is not an operator mode.
-See the [operations boundary](docs/docs/operations.md) before dispatching it.
+A trusted dispatch always publishes through staging to production. Manual runs
+select `apply_staging` and `apply_production` explicitly; production only runs
+after staging succeeds. Immutable package and content-addressed metadata
+objects receive a one-year immutable cache policy; activation metadata, state,
+keys, and repo configuration remain `no-store`. Production deletion is not an
+operator mode. See the [operations boundary](docs/docs/operations.md) before
+dispatching it.
 
 ## Documentation
 
