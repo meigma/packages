@@ -2,11 +2,11 @@
 set -euo pipefail
 
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
-tools_image=meigma-packages-phase0-tools:local
+tools_image=meigma-packages-tools:local
 debian_image='debian:13-slim@sha256:020c0d20b9880058cbe785a9db107156c3c75c2ac944a6aa7ab59f2add76a7bd'
 ubuntu_image='ubuntu:26.04@sha256:3131b4cc82a783df6c9df078f86e01819a13594b865c2cad47bd1bca2b7063bb'
 fedora_image='fedora:44@sha256:6c75d5bf57cb0fa5aa4b92c6a83c86c791644496d9ac230de7711f5b8ec3b898'
-work_dir=$(mktemp -d "${TMPDIR:-/tmp}/meigma-phase5-publish.XXXXXX")
+work_dir=$(mktemp -d "${TMPDIR:-/tmp}/meigma-publish.XXXXXX")
 
 cleanup() {
   rm -rf -- "$work_dir"
@@ -46,7 +46,6 @@ if [[ "$validated_project" != "$PROJECT" || "$validated_tag" != "$TAG" || "$TAG"
   echo 'validated publication identity does not match the requested project and tag' >&2
   exit 2
 fi
-production_confirmation="publish $validated_project $validated_tag to production"
 
 apply_arguments=(
   --bucket "$R2_BUCKET"
@@ -54,12 +53,8 @@ apply_arguments=(
 )
 case "$PUBLICATION_TARGET" in
   staging)
-    if [[ "${R2_PREFIX:-}" != '_staging/' ]]; then
-      echo 'staging publication is confined to R2_PREFIX=_staging/' >&2
-      exit 2
-    fi
-    if [[ "$PUBLIC_BASE_URL" != 'https://pkgs.meigma.dev/_staging' ]]; then
-      echo 'staging publication requires the canonical staging public URL' >&2
+    if [[ -z "${R2_PREFIX:-}" ]]; then
+      echo 'staging publication requires a non-empty R2_PREFIX' >&2
       exit 2
     fi
     apply_arguments+=(--prefix "$R2_PREFIX")
@@ -67,14 +62,6 @@ case "$PUBLICATION_TARGET" in
   production)
     if [[ -n "${R2_PREFIX:-}" ]]; then
       echo 'production publication requires an empty R2_PREFIX' >&2
-      exit 2
-    fi
-    if [[ "$PUBLIC_BASE_URL" != 'https://pkgs.meigma.dev' ]]; then
-      echo 'production publication requires the canonical public URL' >&2
-      exit 2
-    fi
-    if [[ "${PRODUCTION_CONFIRMATION:-}" != "$production_confirmation" ]]; then
-      echo 'production publication requires the exact confirmation phrase' >&2
       exit 2
     fi
     apply_arguments+=(--production-root)
@@ -102,9 +89,9 @@ case "$docker_arch" in
 esac
 
 docker build --quiet --tag "$tools_image" \
-  --build-arg "PHASE0_UID=$(id -u)" \
-  --file "$repo_root/spikes/phase0/Dockerfile.tools" \
-  "$repo_root/spikes/phase0" >/dev/null
+  --build-arg "TOOLS_UID=$(id -u)" \
+  --file "$repo_root/docker/tools.Dockerfile" \
+  "$repo_root/docker" >/dev/null
 
 printf '%s' "$GPG_SIGNING_SUBKEY" > "$work_dir/signing-subkey.asc"
 chmod 0600 "$work_dir/signing-subkey.asc"
@@ -146,18 +133,6 @@ docker run --rm \
     --signing-key "$GPG_SIGNING_FINGERPRINT" \
     --gpg-passphrase-file /work/gpg-passphrase \
     --base-url "$PUBLIC_BASE_URL" > "$work_dir/rebuild-result.json"
-
-if [[ "$PUBLICATION_TARGET" == staging && "${EMPTY_STAGING:-false}" == true ]]; then
-  if [[ "${EMPTY_STAGING_CONFIRMATION:-}" != 'empty _staging only' ]]; then
-    echo 'empty staging recovery requires the exact confirmation phrase' >&2
-    exit 2
-  fi
-  mkdir "$work_dir/empty"
-  mise exec -- go run ./cmd/meigma-packages apply-sync \
-    --root "$work_dir/empty" \
-    "${apply_arguments[@]}" > "$work_dir/empty-result.json"
-  jq -e '.verified == true' "$work_dir/empty-result.json" >/dev/null
-fi
 
 mise exec -- go run ./cmd/meigma-packages apply-sync \
   --root "$work_dir/candidate" \
@@ -218,6 +193,6 @@ docker run --rm \
 
 desired_state=$(jq -r '.desired_state_digest' "$work_dir/rebuild-result.json")
 actions=$(jq -r '.actions | length' "$work_dir/apply-result.json")
-echo "Phase 5 $PUBLICATION_TARGET desired state: $desired_state"
-echo "Phase 5 $PUBLICATION_TARGET ordered R2 actions: $actions"
-echo "Phase 5 $PUBLICATION_TARGET publication, verification, no-op, and clean installs passed."
+echo "$PUBLICATION_TARGET desired state: $desired_state"
+echo "$PUBLICATION_TARGET ordered R2 actions: $actions"
+echo "$PUBLICATION_TARGET publication, verification, no-op, and clean installs passed."

@@ -11,37 +11,29 @@ description: What the read-only workflows and protected publication paths can do
 access, receives no secrets, and runs affected Moon tasks: Go checks,
 documentation, and workflow linting.
 
-`Publish validation` accepts either a manual request or the exact
-`publish-package` repository dispatch event. Both paths validate the registered
-project and exact stable `vX.Y.Z` release tag and prove that same GitHub Release
-source path without secrets. The consumer payload must contain exactly
-`project` and `tag`; extra fields fail validation.
+`Publish` accepts either a manual request or the exact `publish-package`
+repository dispatch event. Both paths first validate the registered project
+and exact stable `vX.Y.Z` release tag in an unprivileged job without secrets.
 
 Manual requests change no package repository state without the explicit
-`apply_staging` input. A trusted consumer dispatch always continues through
-protected staging and production after validation. It cannot request staging
-deletion, skip staging, choose an R2 prefix, or supply either
-protected-operation confirmation.
+`apply_staging` and `apply_production` inputs. A trusted consumer dispatch
+always continues through protected staging and production after validation; it
+carries only `project` and `tag` and cannot skip staging or choose an R2
+prefix.
 
-`Publish validation` can additionally run a manually selected, protected
-`staging` job after its read-only validation succeeds. It imports only the
-signing subkey, independently revalidates and builds the selected registered
-release, applies the ordered plan under `_staging/`, rehydrates and verifies R2,
-repeats the publish as a no-op, and installs the package version derived from
-the validated tag through the public hostname from clean Debian, Ubuntu, and
-Fedora containers.
+The protected `staging` job imports only the signing subkey, independently
+revalidates and builds the selected registered release, applies the ordered
+plan under the staging prefix, rehydrates and verifies R2, repeats the publish
+as a no-op, and installs the package version derived from the validated tag
+through the public hostname from clean Debian, Ubuntu, and Fedora containers.
+Because the applied sync plan converges on the verified desired state
+(deletions last, verification before completion), recovering staging from any
+bad or empty state is just another staging publish.
 
-The optional staging recovery rehearsal requires both `empty_staging=true` and
-the exact `empty _staging only` phrase. It empties only `_staging/`, verifies
-that operation, and immediately rebuilds the prefix from GitHub Releases.
-
-The protected `production` job runs only after staging succeeds and requires
-the exact `publish <project> <tag> to production` phrase derived from its
-validated selection. Manual runs supply the phrase; trusted repository dispatch
-synthesizes it internally and cannot override it. Production publishes at the
-bucket root with separate credentials. Root sync deliberately excludes
-`_staging/` from hydration, mutation, and verification, and rejects an
-incomplete production candidate before making remote requests. A production
+The protected `production` job runs only after staging succeeds. Production
+publishes at the bucket root with separate credentials. Root sync deliberately
+excludes `_staging/` from hydration, mutation, and verification, and rejects
+an incomplete production candidate before making remote requests. A production
 run may safely be a no-op. There is no operator selection that empties or
 deletes production independently of the verified desired-state plan.
 

@@ -28,20 +28,13 @@ go run ./cmd/meigma-packages --help
 The CLI is not distributed independently. Local development and GitHub Actions
 run it from this repository.
 
-## Current proof surface
+## Publication
 
-- `root:phase5-source-proof` requires a registered project and exact stable tag
-  through `PROJECT` and `TAG`, then performs clean DEB and RPM installs without
-  publishing; `incus-gh-runner` `v1.1.0` is the current exercised example.
-- `root:phase5-publish` is the secret-bearing protected entrypoint used to
-  publish, verify, repeat as a no-op, and install from staging or production.
-- `root:workflow-check` validates workflow syntax and embedded and standalone
-  shell with pinned `actionlint` and ShellCheck.
-
-The publish workflow validates without secrets, then hands off to protected
-staging and production. Manual runs require explicit inputs and exact
-confirmation phrases derived from the validated project and tag. A trusted
-consumer dispatch must contain exactly `project` and `tag`; it cannot select
-deletion behavior, staging bypass, confirmation text, or R2 targeting. See [Install
-packages](install.md) for the public repository commands and [Operations
-boundary](operations.md) for the enforced scope and recovery behavior.
+The `Publish` workflow validates the requested project and tag without
+secrets, then hands off to the protected staging and production jobs, which
+run `scripts/publish.sh` to rebuild, sign, apply, verify, and clean-install
+the release. Manual runs select `apply_staging` and `apply_production`
+explicitly; a trusted consumer dispatch carrying `project` and `tag` always
+publishes through staging to production. See [Install packages](install.md)
+for the public repository commands and [Operations boundary](operations.md)
+for the enforced scope and recovery behavior.

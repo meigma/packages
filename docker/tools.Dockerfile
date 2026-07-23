@@ -1,6 +1,6 @@
 FROM debian:13-slim@sha256:020c0d20b9880058cbe785a9db107156c3c75c2ac944a6aa7ab59f2add76a7bd
 
-ARG PHASE0_UID=1000
+ARG TOOLS_UID=1000
 
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -13,13 +13,10 @@ RUN apt-get update \
         gnupg \
         python3 \
         rpm \
-        shellcheck \
     && rm -rf /var/lib/apt/lists/*
 
-RUN useradd --uid "$PHASE0_UID" --gid nogroup --create-home phase0
+RUN useradd --uid "$TOOLS_UID" --gid nogroup --create-home tools
 
-COPY build-repository.sh /usr/local/bin/build-repository
-
-USER phase0
+USER tools
 
 ENTRYPOINT []
