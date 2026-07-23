@@ -27,7 +27,7 @@ const (
 )
 
 var versionPattern = regexp.MustCompile(
-	`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$`,
+	`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$`,
 )
 
 // RebuildRequest describes a deterministic fixture-release-set rebuild.

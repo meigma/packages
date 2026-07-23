@@ -234,13 +234,21 @@ projects:
 		{
 			name:    "accepts a registered rebuild project without a tag",
 			project: "phase3-fixture",
-			want:    RequestValidation{Project: "phase3-fixture"},
+			want: RequestValidation{
+				Project:     "phase3-fixture",
+				PackageName: "meigma-phase0",
+			},
 		},
 		{
-			name:    "accepts a registered publish project and stable tag",
+			name:    "accepts incus-gh-runner v1.1.0 package version contract",
 			project: "phase3-fixture",
-			tag:     "v2.1.0",
-			want:    RequestValidation{Project: "phase3-fixture", Tag: "v2.1.0"},
+			tag:     "v1.1.0",
+			want: RequestValidation{
+				Project:        "phase3-fixture",
+				PackageName:    "meigma-phase0",
+				Tag:            "v1.1.0",
+				PackageVersion: "1.1.0",
+			},
 		},
 		{
 			name:        "rejects an unsafe project name",
@@ -256,6 +264,12 @@ projects:
 			name:        "rejects a prerelease tag",
 			project:     "phase3-fixture",
 			tag:         "v2.1.0-rc.1",
+			errorSubstr: "stable v-prefixed semantic version",
+		},
+		{
+			name:        "rejects a malformed repeated-prefix tag",
+			project:     "phase3-fixture",
+			tag:         "vv2.1.0",
 			errorSubstr: "stable v-prefixed semantic version",
 		},
 	}

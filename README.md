@@ -6,8 +6,9 @@ applies deterministic retention, proves rebuild/no-op behavior, and executes
 deletion-safe sync plans. The protected publication path signs with the CI
 signing subkey, publishes a verified GitHub Release to either the isolated R2
 `_staging/` prefix or the production root, verifies the remote result, and
-installs through the public hostname. The initial production slice is confined
-to `incus-gh-runner` `v1.0.0` while that boundary is rehearsed.
+installs through the public hostname. Publication is confined to registered
+projects and exact stable `vX.Y.Z` releases whose GitHub assets, digests,
+package identity, and provenance all verify independently.
 
 The `meigma-packages` binary is an implementation detail of this repository. It
 is built and run from source in local development and GitHub Actions, and is not
@@ -90,14 +91,20 @@ signing material remain later phases.
 
 ## Real release source proof
 
-The opt-in Phase 5 proof downloads `incus-gh-runner` `v1.0.0` from its public
-GitHub Release, verifies GitHub's asset digests and the pinned release-workflow
-attestations, rebuilds the signed multi-architecture repositories, and performs
-clean DEB and RPM installs on the current Docker architecture:
+The opt-in Phase 5 proof downloads the selected registered project's exact
+stable release from GitHub, verifies GitHub's asset digests and the pinned
+release-workflow attestations, rebuilds the signed multi-architecture
+repositories, and performs clean DEB and RPM installs on the current Docker
+architecture:
 
 ```sh
-moon run root:phase5-source-proof
+PROJECT=incus-gh-runner TAG=v1.1.0 moon run root:phase5-source-proof
 ```
+
+`PROJECT` and `TAG` are required, so another registered exact stable release
+uses the same proof without changing the script. The proof derives the expected
+package version by removing exactly one leading `v` from the validated tag and
+requires both package formats to report it.
 
 The source contract is checked into [`projects.yml`](projects.yml). The proof
 uses GitHub and Docker but no publishing or production credentials. It does not
@@ -113,6 +120,8 @@ The `Publish validation` and manual `Rebuild validation` workflows exercise the
 same fixture-backed proofs on GitHub-hosted runners. They use
 `meigma-packages validate-request` to reject unknown projects, unsafe project
 names, and invalid stable release tags before invoking the local proof.
+Accepted publish tags have exactly the `vX.Y.Z` shape; prereleases, build
+metadata, missing or repeated prefixes, and leading-zero variants fail closed.
 
 `Publish validation` also accepts the exact `publish-package` repository
 dispatch event from a trusted consumer. Its payload is restricted to `project`
@@ -125,8 +134,9 @@ run the protected staging job with `apply_staging=true`. Selecting
 rehearses recovery by emptying and rebuilding that prefix only.
 
 Production is a second protected job that can run only after staging succeeds.
-It requires `apply_production=true` and the exact
-`publish incus-gh-runner v1.0.0 to production` confirmation. Root publication
+It requires `apply_production=true` and the exact confirmation derived from the
+validated selection: `publish <project> <tag> to production`. Trusted dispatch
+synthesizes that phrase internally; manual runs must supply it exactly. Root publication
 preserves every `_staging/` object and rejects incomplete candidates before
 remote access. Immutable package and content-addressed metadata objects receive
 a one-year immutable cache policy; activation metadata, state, keys, and repo

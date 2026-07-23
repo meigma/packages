@@ -19,8 +19,9 @@ fault coverage, and workflow policy enforcement.
 
 `Publish validation` accepts either a manual request or the exact
 `publish-package` repository dispatch event. Both paths validate the registered
-project and stable release tag and prove the real GitHub Release source path
-without secrets. The consumer payload is confined to `project` and `tag`.
+project and exact stable `vX.Y.Z` release tag and prove that same GitHub Release
+source path without secrets. The consumer payload must contain exactly
+`project` and `tag`; extra fields fail validation.
 
 `Rebuild validation` is manually dispatched with a fixture project. It
 validates the project and runs the Phase 2 deterministic rebuild proof.
@@ -28,22 +29,26 @@ validates the project and runs the Phase 2 deterministic rebuild proof.
 Manual requests change no package repository state without the explicit
 `apply_staging` input. A trusted consumer dispatch always continues through
 protected staging and production after validation. It cannot request staging
-deletion or supply either protected-operation confirmation.
+deletion, skip staging, choose an R2 prefix, or supply either
+protected-operation confirmation.
 
 `Publish validation` can additionally run a manually selected, protected
 `staging` job after its read-only validation succeeds. It imports only the
-signing subkey, builds the verified `incus-gh-runner` `v1.0.0` release, applies
-the ordered plan under `_staging/`, rehydrates and verifies R2, repeats the
-publish as a no-op, and installs through the public hostname from clean Debian,
-Ubuntu, and Fedora containers.
+signing subkey, independently revalidates and builds the selected registered
+release, applies the ordered plan under `_staging/`, rehydrates and verifies R2,
+repeats the publish as a no-op, and installs the package version derived from
+the validated tag through the public hostname from clean Debian, Ubuntu, and
+Fedora containers.
 
 The optional staging recovery rehearsal requires both `empty_staging=true` and
 the exact `empty _staging only` phrase. It empties only `_staging/`, verifies
 that operation, and immediately rebuilds the prefix from GitHub Releases.
 
 The protected `production` job runs only after staging succeeds and requires
-the exact `publish incus-gh-runner v1.0.0 to production` phrase. It publishes at
-the bucket root with separate credentials. Root sync deliberately excludes
+the exact `publish <project> <tag> to production` phrase derived from its
+validated selection. Manual runs supply the phrase; trusted repository dispatch
+synthesizes it internally and cannot override it. Production publishes at the
+bucket root with separate credentials. Root sync deliberately excludes
 `_staging/` from hydration, mutation, and verification, and rejects an
 incomplete production candidate before making remote requests. A production
 run may safely be a no-op. There is no operator selection that empties or
@@ -81,8 +86,7 @@ subkey, never the primary signing key.
 
 ## Deferred follow-up
 
-The following remain deferred beyond the initial production slice:
+The following remains deferred beyond the generalized production slice:
 
 - automated credential renewal or an OIDC broker;
-- a general production release selector after the initial `v1.0.0` rehearsal;
-- consumer-side release dispatch and its end-to-end proof.
+- onboarding additional projects through the existing registry contract.

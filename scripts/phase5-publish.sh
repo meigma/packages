@@ -33,10 +33,20 @@ for variable in "${required_variables[@]}"; do
     exit 2
   fi
 done
-if [[ "$PROJECT" != incus-gh-runner || "$TAG" != v1.0.0 ]]; then
-  echo 'Phase 5 initial publication is confined to incus-gh-runner v1.0.0' >&2
+
+validation_result=$(mise exec -- go run ./cmd/meigma-packages validate-request \
+  --registry "$repo_root/projects.yml" \
+  --project "$PROJECT" \
+  --tag "$TAG")
+validated_project=$(jq -er '.project' <<<"$validation_result")
+validated_tag=$(jq -er '.tag' <<<"$validation_result")
+package_name=$(jq -er '.package_name' <<<"$validation_result")
+package_version=$(jq -er '.package_version' <<<"$validation_result")
+if [[ "$validated_project" != "$PROJECT" || "$validated_tag" != "$TAG" || "$TAG" != "v$package_version" ]]; then
+  echo 'validated publication identity does not match the requested project and tag' >&2
   exit 2
 fi
+production_confirmation="publish $validated_project $validated_tag to production"
 
 apply_arguments=(
   --bucket "$R2_BUCKET"
@@ -63,7 +73,7 @@ case "$PUBLICATION_TARGET" in
       echo 'production publication requires the canonical public URL' >&2
       exit 2
     fi
-    if [[ "${PRODUCTION_CONFIRMATION:-}" != 'publish incus-gh-runner v1.0.0 to production' ]]; then
+    if [[ "${PRODUCTION_CONFIRMATION:-}" != "$production_confirmation" ]]; then
       echo 'production publication requires the exact confirmation phrase' >&2
       exit 2
     fi
@@ -172,6 +182,9 @@ fi
 for image in "$debian_image" "$ubuntu_image"; do
   docker run --rm \
     --env "PUBLIC_BASE_URL=$PUBLIC_BASE_URL" \
+    --env "PROJECT=$validated_project" \
+    --env "PACKAGE_NAME=$package_name" \
+    --env "PACKAGE_VERSION=$package_version" \
     "$image" sh -ceu '
       export DEBIAN_FRONTEND=noninteractive
       apt-get update >/dev/null
@@ -182,22 +195,25 @@ for image in "$debian_image" "$ubuntu_image"; do
 Types: deb
 URIs: $PUBLIC_BASE_URL/apt
 Suites: stable
-Components: incus-gh-runner
+Components: $PROJECT
 Signed-By: /etc/apt/keyrings/meigma.asc
 EOF
       apt-get update -o Acquire::Languages=none >/dev/null
-      apt-get install -y --no-install-recommends incus-gh-runner >/dev/null
-      test "$(dpkg-query --show --showformat="\${Version}" incus-gh-runner)" = 1.0.0
+      apt-get install -y --no-install-recommends "$PACKAGE_NAME" >/dev/null
+      test "$(dpkg-query --show --showformat="\${Version}" "$PACKAGE_NAME")" = "$PACKAGE_VERSION"
     '
 done
 
 docker run --rm \
   --env "PUBLIC_BASE_URL=$PUBLIC_BASE_URL" \
+  --env "PROJECT=$validated_project" \
+  --env "PACKAGE_NAME=$package_name" \
+  --env "PACKAGE_VERSION=$package_version" \
   "$fedora_image" sh -ceu '
-    curl -fsS "$PUBLIC_BASE_URL/rpm/incus-gh-runner/meigma.repo" \
+    curl -fsS "$PUBLIC_BASE_URL/rpm/$PROJECT/meigma.repo" \
       -o /etc/yum.repos.d/meigma.repo
-    dnf -q --refresh install -y incus-gh-runner >/dev/null
-    test "$(rpm --query --queryformat "%{VERSION}" incus-gh-runner)" = 1.0.0
+    dnf -q --refresh install -y "$PACKAGE_NAME" >/dev/null
+    test "$(rpm --query --queryformat "%{VERSION}" "$PACKAGE_NAME")" = "$PACKAGE_VERSION"
   '
 
 desired_state=$(jq -r '.desired_state_digest' "$work_dir/rebuild-result.json")
