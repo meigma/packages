@@ -53,3 +53,17 @@ checkbox (default false) remains the manual speed bump; trusted dispatch
 unchanged. Plan after merge: staging-only dispatch of incus-gh-runner v1.1.0
 from main to prove the reworked path. Also noticed stale feat/phase4-staging
 branch allowed in staging environment deployment policy — candidate cleanup.
+
+## 2026-07-22 19:55 — PR 15 merged and staging path proven
+PR #15 merged as fa6accf; main CI green. Staging-only manual dispatch run
+29973794881 (project=incus-gh-runner, tag=v1.1.0, apply_staging=true,
+apply_production=false) succeeded through the reworked path: validate and
+staging jobs passed, production correctly skipped. Staging job reported
+desired state 5391844b..., 7 ordered R2 actions, and passed verification,
+no-op replay, and clean Debian/Ubuntu/Fedora installs. Public staging
+manifest shows selected_versions=[v1.1.0], 4 packages. Cleanup complete:
+scripts/ now holds lint-workflows.sh + publish.sh only; workflows are ci.yml +
+publish.yml; spikes/ and testdata/ gone; ~1,850 lines removed across PRs
+#14/#15. Remaining candidates (not done): remove stale feat/phase4-staging
+from the staging environment's deployment branch policy; trivial help-text
+assertions in internal/cli/root_test.go left as-is.
